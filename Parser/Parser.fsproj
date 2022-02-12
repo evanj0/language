@@ -1,0 +1,22 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Cst.fs" />
+    <Compile Include="CstPrinting.fs" />
+    <Compile Include="CstSharedParsing.fs" />
+    <Compile Include="CstTypeParsing.fs" />
+    <Compile Include="CstPatternParsing.fs" />
+    <Compile Include="CstExprParsing.fs" />
+    <Compile Include="CstModuleParsing.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FParsec" Version="1.1.1" />
+  </ItemGroup>
+
+</Project>

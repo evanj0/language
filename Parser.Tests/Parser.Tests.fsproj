@@ -12,6 +12,7 @@
     <Compile Include="CstPatternParsing_Tests.fs" />
     <Compile Include="CstExprParsing_Tests.fs" />
     <Compile Include="CstModuleParsing_Tests.fs" />
+    <Compile Include="Cst2Ast_Tests.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 

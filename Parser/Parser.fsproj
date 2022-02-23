@@ -13,10 +13,16 @@
     <Compile Include="CstPatternParsing.fs" />
     <Compile Include="CstExprParsing.fs" />
     <Compile Include="CstModuleParsing.fs" />
+    <Compile Include="Ast.fs" />
+    <Compile Include="Cst2Ast.fs" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="FParsec" Version="1.1.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Shared\Shared.fsproj" />
   </ItemGroup>
 
 </Project>

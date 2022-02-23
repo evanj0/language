@@ -1,12 +1,14 @@
 ﻿module Cst
 
+open Range
+
 (* Non-idiomatic capitalization in this file matches convention in grammar definition. *)
 
-type InputPosition = { index: int64; line: int64; column: int64 }
-
-type pos<'a> = Pos of 'a * startPos: InputPosition * endPos: InputPosition
+type pos<'a> = Pos of 'a * startPos: Position * endPos: Position
 with
     member self.inner with get() = match self with Pos(inner, _, _) -> inner
+    member self.start with get() = match self with Pos(_, start, _) -> start
+    member self.stop with get() = match self with Pos(_, _, stop) -> stop
 
 let unwrapPos f (Pos (inner, _, _)) = f inner
 

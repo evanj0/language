@@ -29,3 +29,7 @@ module Result =
         match option with
         | Some x -> Ok x
         | None -> Error errorValue
+
+    let isOk this = match this with Ok _ -> true | Error _ -> false
+
+    let isError this = not (isOk this)

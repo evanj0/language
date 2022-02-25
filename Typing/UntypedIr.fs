@@ -29,3 +29,5 @@ module Expr =
     and Case =
         | Case of pat: Pattern.Pattern * expr: Expr * next: Case
         | Default of expr: Expr
+
+type Expr = Expr.Expr

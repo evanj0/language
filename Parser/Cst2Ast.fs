@@ -94,6 +94,9 @@ and enclosedType (x: enclosedType) =
         |> fun xs -> x :: xs
         |> List.map recordField
         |> fun xs -> Ast.Type.create (Ast.Type.Record xs) l.start r.stop
+    // TODO Implement
+    | Nominal(name, args) -> failwith "Not Implemented"
+    | Variable(_, name, args) -> failwith "Not Implemented"
 
 let rec pattern (x: pattern): Ast.Pattern.Pattern = 
     match x with

@@ -80,6 +80,11 @@ module Pattern =
             |> List.map signature
             |> List.fold (fun acc x -> sprintf "%s %s" acc x) "tuple"
             |> sprintf "(%s)"
+        // TODO Implement
+        | Record(fields) -> failwith "Not Implemented"
+        | Literal(value) -> failwith "Not Implemented"
+        | Assignment(name, pattern) -> failwith "Not Implemented"
+        | Variant(variant, pattern) -> failwith "Not Implemented"
 
 module Expression =
 
@@ -145,6 +150,14 @@ module Expression =
             |> List.map (fun (pat, expr) -> sprintf "(case [%s] %s)" (Pattern.signature pat) (signature expr))
             |> List.fold (fun acc x -> sprintf "%s %s" acc x) (sprintf "match [%s]" (signature expr))
             |> sprintf "(%s)"
+        // TODO Implement
+        | ExplicitType(expr, ty) -> failwith "Not Implemented"
+        | RecordUpdate(expr, items) -> failwith "Not Implemented"
+        | Application(left, right) -> failwith "Not Implemented"
+        | Let(name, value) -> failwith "Not Implemented"
+        | Conditional(guard, thenBranch, elseBranch) -> failwith "Not Implemented"
+        | Reference(expr) -> failwith "Not Implemented"
+        | Mutate(expr, value) -> failwith "Not Implemented"
 
 module Program =
 

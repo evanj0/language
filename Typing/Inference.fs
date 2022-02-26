@@ -1,4 +1,4 @@
-﻿module Inference
+module Inference
 
 open Ir
 open UntypedIr
@@ -17,15 +17,28 @@ type Error =
 module Error =
     let create message range = { Error.message = message; range = range }
 
-    let ``value not found`` ident = sprintf "The value `%s` is not defined in the local or module scope." (Ident.print ident) |> create
+    let ``value not found`` ident = 
+        sprintf "The value `%s` is not defined in the local or module scope." (Ident.print ident) |> create
 
-    let ``overloaded value not found`` ident = sprintf "The value `%s` is not defined in the local scope, or in module scope as a single or overloaded value." (Ident.print ident) |> create
+    let ``overloaded value not found`` ident = 
+        sprintf "The value `%s` is not defined in the local scope, or in module scope as a single or overloaded value." (Ident.print ident) |> create
+
+    let ``tuples not same length`` t1 t2 = 
+        sprintf "The tuples of type `%s` and `%s` do not have the same number of elements." (Type.print t1) (Type.print t2) |> create
+
+    let ``cannot constrain type variable`` var t =
+        sprintf "Cannot match type variable `%s` with type `%s`. Constraining type variables is not allowed, as this causes their type to become more specific than intended." (Type.print var) (Type.print t) |> create
 
 [<RequireQualifiedAccess>]
 module Constraint =
     type Constraint =
-        | Equals of left: Type * right: Type * range: Range
-        | Bound of name: string * t: Type
+        { 
+            left: Type
+            right: Type
+            range: Range 
+        }
+
+    let copyRange left right this = { this with left = left; right = right}
 
 type Constraint = Constraint.Constraint
 
@@ -65,7 +78,7 @@ module Env =
                 |> List.filter (fun (x, _, _) -> x |> Ident.contains ident)
                 |> List.map (fun (_, id, x) -> id, x)
             if globals.Length >= 1 then
-                Ok (Type.Overloaded globals)
+                Ok (Type.Contained (Type.Overloaded globals))
             else local
 
 type State =
@@ -74,7 +87,7 @@ type State =
     }
 
 module State = 
-    let createUnknown this = { this with State.index = this.index + 1 }, this.index |> Type.Unknown
+    let createUnknown this = { this with State.index = this.index + 1 }, this.index |> (fun x -> Type.Contained (Type.Unknown x))
 
 type IResult<'a> =
     | IOk of state: State * t: 'a * c: Constraints
@@ -84,8 +97,8 @@ type IResult<'a> =
 module IResult =
     let fromResult state c result =
         match result with
-        | Result.Ok t -> IOk (state, t, c)
-        | Result.Error e -> IErr e
+        | Ok t -> IOk (state, t, c)
+        | Error e -> IErr e
 
     let bind (f: State -> _ -> _ IResult) (result: _ IResult): _ IResult =
         match result with
@@ -124,7 +137,7 @@ module private I =
     [<RequireQualifiedAccess>]
     module Constrain =
         let equals left right this: Constraints =
-            [Constraint.Equals (left, right, this |> Env.currentRange)]
+            [{Constraint.left = left; right = right; range = this |> Env.currentRange}]
 
 [<RequireQualifiedAccess>]
 module Inference =
@@ -133,12 +146,12 @@ module Inference =
         | Expr.Ident ident -> 
             env
             |> I.getType ident state
-            // |> I.inst
-        | Expr.Literal (Literal.Str _) -> IResult.ret state (Type.Primitive Type.Str)
+            // TODO Instantiate types
+        | Expr.Literal (Literal.Str _) -> IResult.ret state (Type.Contained (Type.Primitive Type.Str))
 
         | Expr.Cond (guard, th, el) ->
             env
-            |> infer guard state (I.Constrain.equals (Type.Primitive Type.Bool))
+            |> infer guard state (I.Constrain.equals (Type.Contained (Type.Primitive Type.Bool)))
             |> IResult.bind (fun state _ ->
                 env
                 |> infer th state I.noConstraints
@@ -158,7 +171,7 @@ module Inference =
                         inferXs state xs
                         |> IResult.mapType (fun ts -> t :: ts))
             inferXs state xs
-            |> IResult.mapType Type.Tuple
+            |> IResult.mapType (fun xs -> Type.Separable (Type.Tuple xs))
 
         | Expr.Func (p, expr) ->
             state
@@ -175,15 +188,68 @@ module Inference =
         | Expr.Type (expr, t) ->
             env
             |> infer expr state (I.Constrain.equals t)
+            // TODO Needs to extend environment with universally quantified vars
 
         | Expr.Tagged (expr, range) ->
             env
             |> Env.setCurrentRange range
             |> infer expr state constraintFn
+        // TODO Implement
+        | Expr.Literal(value) -> failwith "Not Implemented"
+        | Expr.Record(elements) -> failwith "Not Implemented"
+        | Expr.Block(expr, next) -> failwith "Not Implemented"
+        | Expr.Extern(name, argument) -> failwith "Not Implemented"
+        | Expr.NoRet -> failwith "Not Implemented"
+        | Expr.Update(expr, fields) -> failwith "Not Implemented"
+        | Expr.App(f, x) -> failwith "Not Implemented"
+        | Expr.Let(name, expr, body) -> failwith "Not Implemented"
+        | Expr.Ref(expr) -> failwith "Not Implemented"
+        | Expr.Mut(expr, value) -> failwith "Not Implemented"
+        | Expr.Match(expr, case) -> failwith "Not Implemented"
 
         |> IResult.map (fun state t -> state, t, constraintFn t env)
 
-    let refine (t: Type) (other: Type): Result<Type, Error> =
-        match t, other with
-        | Type.Unknown _, other -> Ok other
-        | t, Type.Opaque (name, inner) -> // determine if t matches inner
+module Solver =
+    type TypeExpression =
+        | Type of t: Type
+        | OverloadFilterMap of overloads: (Uid * TypeExpression list) list * filter: TypeExpression list * map: int
+
+    type TypeStatement = 
+        | UnknownEquals of unknown: Type.Unknown * value: TypeExpression
+
+    let rec solveTypeExpression expr =
+        match expr with
+        | OverloadFilterMap (overloads, filter, map) ->
+            let typeMatchesFilter (filter: TypeExpression list) (t: TypeExpression list) =
+                if filter.Length = t.Length then
+                    List.zip filter t
+                    |> List.map (fun (filter, t) ->
+                        ) // TODO t equals filter or filter is unknown
+
+            overloads
+            |> List.filter (fun (_, overload) ->
+                )
+
+    let rec createTypeStatements (c: Constraint): Result<TypeStatement list, Error> =
+        let fail e = Error (e c.left c.right c.range)
+        match c.left, c.right with
+        | Type.Separable l, Type.Separable r -> 
+            match l, r with
+            | Type.Function (l1, l2), Type.Function (r1, r2) ->
+                [
+                    createTypeStatements (c |> Constraint.copyRange l1 r1);
+                    createTypeStatements (c |> Constraint.copyRange l2 r2);
+                ]
+                |> Result.collect
+                |> Result.map (fun xs -> List.concat xs)
+            | Type.Tuple l, Type.Tuple r ->
+                if l.Length = r.Length then
+                    List.zip l r
+                    |> List.map (fun (l, r) -> createTypeStatements (c |> Constraint.copyRange l r))
+                    |> Result.collect
+                    |> Result.map (fun xs -> List.concat xs)
+                else fail Error.``tuples not same length``
+        | Type.Contained (Type.Unknown id), a -> 
+            Ok [UnknownEquals (id, Type a)]
+        | Type.Contained (Type.Variable _), _ -> 
+            fail Error.``cannot constrain type variable``

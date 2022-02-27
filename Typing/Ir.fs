@@ -114,6 +114,13 @@ module Type =
                 field
             |> create
 
+        let ``couldn't match unions`` variant union other =
+            sprintf "Couldn't match the union `%s` with the union `%s` because the former does not have a variant of type `%s`"
+                (print union)
+                (print other)
+                (print variant)
+            |> create
+
         let ``couldn't match the type variable with`` var1 t =
             (sprintf
                 "Couldn't match the type variable `%s` with the type `%s`."
@@ -140,6 +147,37 @@ module Type =
         let ``couldn't match name`` n1 n2 =
             sprintf "Couldn't match the name `%s` with `%s`." (Ident.print n1) (Ident.print n2)
             |> create
+
+
+    /// runs `mapping` on all contained types (non separable) and carries state.
+    /// This can have the effect of replacing all of one type with another; this
+    /// is probably not desired since instantiation only entails replacing variables
+    /// in a type constructor.
+    let rec subst (mapping: 'state -> Type -> 'state * Type) (state: 'state) (t: Type): 'state * Type =
+        
+        let rec substElements lmapping rmapping state ts =
+                match ts with
+                | t::ts ->
+                    let state, newT = subst mapping state (lmapping t)
+                    let state, ts = substElements lmapping rmapping state ts
+                    state, (rmapping t newT) :: ts
+                | [] -> state, []
+
+        match t with
+        | Function (left, right) -> 
+            let state, left = subst mapping state left
+            let state, right = subst mapping state right
+            state, Function(left, right)
+        | Tuple elements -> 
+            let state, ts = substElements id (fun _ -> id) state elements
+            state, Tuple ts
+        | Record elements ->
+            let state, ts = substElements (fun (_, t) -> t) (fun (n, _) t -> n, t) state elements
+            state, Record ts
+        | Union variants ->
+            let state, ts = substElements id (fun _ -> id) state variants
+            state, Union ts
+
 
     /// Directionally compares types; `other` can be more general than `this`.
     /// Runs `f` on `(this, other)` and returns all results.
@@ -173,8 +211,8 @@ module Type =
         | Primitive Char, Primitive Char -> Ok res
         | Primitive Bool, Primitive Bool -> Ok res
         // TODO Test for these cases to determine if they are actually unreachable
-        | Overloaded _, Overloaded _ -> failStr "matches Overloaded Overloaded is unreachable"
-        | Constructor _, Constructor _ -> failStr "matches Constructor Constructor is unreachable"
+        | Overloaded _, Overloaded _ -> failStr "tryMatch Overloaded Overloaded is unreachable"
+        | Constructor _, Constructor _ -> failStr "tryMatch Constructor Constructor is unreachable"
         | Function (thisL, thisR), Function (otherL, otherR) ->
             result {
                 let! res1 = thisL |> tryMatch otherL
@@ -206,10 +244,19 @@ module Type =
                         |> Result.fromOption (Error.``couldn't match records because field`` thisName (Record this) (Record other))))
                 |> Result.collect
             else fail Error.``couldn't match records``
-        | Union this, Union other ->
-            other // TODO correct this
-            |> List.map (fun ot -> this |> List.filter (fun tt -> tt |> tryMatch ot))
-            |> List.isNotEmpty
+        | Union this, Union other -> // this :> other
+            other
+            |> List.map (fun otherType -> 
+                this
+                |> List.map (fun thisType -> thisType |> tryMatch otherType)
+                |> List.filter Result.isOk
+                |> Result.collect
+                |> Result.bind (fun results ->
+                    results
+                    |> List.concat
+                    |> List.tryHead
+                    |> Result.fromOption (Error.``couldn't match unions`` otherType (Union this) (Union other))))
+            |> Result.collect
         | _ -> Error(Error.typeMismatch this other)
 
 type Type = Type.Type

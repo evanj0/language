@@ -23,6 +23,8 @@ module Result =
                         collect' (Ok (state @ [el])) xs)
             | Error e -> Error e
 
+    /// Combines a list of results into a single result. Stops at the first `Error` value.
+    /// `Result.collect []` returns `Ok ([])`.
     let collect xs = collect' (Ok []) xs
 
     let fromOption errorValue option =

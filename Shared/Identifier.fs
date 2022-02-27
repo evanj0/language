@@ -24,7 +24,15 @@ module Ident =
     let fromString string = fromList [string]
 
     let contains other this =
-        other.final = this.final && this.modules |> List.containsAtStart other.modules
+        this.modules 
+        |> List.containsAtStart other.modules
+        && other.final = this.final
+
+    let equals other this =
+        List.zip this.modules other.modules
+        |> List.map (fun (x, y) -> x = y)
+        |> List.forall id
+        && this.final = other.final
 
     let print this =
         this.modules

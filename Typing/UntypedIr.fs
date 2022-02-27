@@ -20,6 +20,7 @@ module Expr =
         | Update of expr: Expr * fields: (string * Expr) list
         | App of f: Expr * x: Expr
         | Let of name: string * expr: Expr * body: Expr
+        | UnsafeLet of name: string * expr: Expr * body: Expr
         | Cond of guard: Expr * th: Expr * el: Expr
         | Ref of expr: Expr
         | Mut of expr: Expr * value: Expr

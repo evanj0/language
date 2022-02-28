@@ -20,19 +20,23 @@ module Literal =
 [<RequireQualifiedAccess>]
 module Type =
 
-    type Unknown = int
+    type TUnknown = { id: int }
+
+    module TUnknown =
+        let equals (a: TUnknown) b = a.id = b.id
 
     type TVariable = { id: int }
 
     [<RequireQualifiedAccess>]
     module TVariable =
-        let equals a b = a.id = b.id
+        let equals (a: TVariable) b = a.id = b.id
 
         let print (var: TVariable) = "" // TODO implement
 
     type Type =
-        | Unknown of id: Unknown
+        | Unknown of id: TUnknown
         | Variable of id: TVariable
+        | Named of name: Ident * env: (Ident * Type)
         | Overloaded of overloads: (Uid * Type) list
         | Constructor of args: TVariable list * bounds: Bound list * env: (Ident * Type) list * body: Type
         | Opaque of name: Ident * inner: Type
@@ -83,6 +87,11 @@ module Type =
             sprintf "Couldn't match type `%s` with type `%s`." (print t1) (print t2)
             |> create
 
+        let insufficientInformation =
+            ("Couldn't infer the type based on provided information.",
+             "The type of: each expression in a block, the value in a binding expression, and the value in an unsafe binding expression need to be fully inferrable.")
+            |> createWithNote
+
         let ``value not found`` ident =
             sprintf "The value `%s` is not defined in the local or module scope." (Ident.print ident)
             |> create
@@ -99,7 +108,7 @@ module Type =
                 (print t1)
                 (print t2)
             |> create
-        
+
         let ``couldn't match records`` t1 t2 =
             sprintf
                 "Couldn't match record `%s` with record `%s` because the numbers of elements are not equal."
@@ -108,14 +117,16 @@ module Type =
             |> create
 
         let ``couldn't match records because field`` field record other =
-            sprintf "Couldn't match record `%s` with record `%s` because the latter does not have a field named `%s`."
+            sprintf
+                "Couldn't match record `%s` with record `%s` because the latter does not have a field named `%s`."
                 (print record)
                 (print other)
                 field
             |> create
 
         let ``couldn't match unions`` variant union other =
-            sprintf "Couldn't match the union `%s` with the union `%s` because the former does not have a variant of type `%s`"
+            sprintf
+                "Couldn't match the union `%s` with the union `%s` because the former does not have a variant of type `%s`"
                 (print union)
                 (print other)
                 (print variant)
@@ -153,30 +164,41 @@ module Type =
     /// This can have the effect of replacing all of one type with another; this
     /// is probably not desired since instantiation only entails replacing variables
     /// in a type constructor.
-    let rec subst (mapping: 'state -> Type -> 'state * Type) (state: 'state) (t: Type): 'state * Type =
-        
+    let rec mapContained (mapping: 'state -> Type -> 'state * Type) (state: 'state) (t: Type) : 'state * Type =
+
         let rec substElements lmapping rmapping state ts =
-                match ts with
-                | t::ts ->
-                    let state, newT = subst mapping state (lmapping t)
-                    let state, ts = substElements lmapping rmapping state ts
-                    state, (rmapping t newT) :: ts
-                | [] -> state, []
+            match ts with
+            | t :: ts ->
+                let state, newT = mapContained mapping state (lmapping t)
+                let state, ts = substElements lmapping rmapping state ts
+                state, (rmapping t newT) :: ts
+            | [] -> state, []
 
         match t with
-        | Function (left, right) -> 
-            let state, left = subst mapping state left
-            let state, right = subst mapping state right
+        | Function (left, right) ->
+            let state, left = mapContained mapping state left
+            let state, right = mapContained mapping state right
             state, Function(left, right)
-        | Tuple elements -> 
+        | Tuple elements ->
             let state, ts = substElements id (fun _ -> id) state elements
             state, Tuple ts
         | Record elements ->
-            let state, ts = substElements (fun (_, t) -> t) (fun (n, _) t -> n, t) state elements
+            let state, ts =
+                substElements (fun (_, t) -> t) (fun (n, _) t -> n, t) state elements
+
             state, Record ts
         | Union variants ->
             let state, ts = substElements id (fun _ -> id) state variants
             state, Union ts
+        | Overloaded overloads ->
+            substElements (fun (_, t) -> t) (fun (n, _) t -> n, t) state overloads
+            |> fun (state, xs) -> state, Overloaded xs
+        | Constructor (args, bounds, env, body) ->
+            // map through body and add to a new list an argument if the mapping hits a variable that is in
+            // the old args
+            // env should not be touched
+            // bounds need to be updated
+            failwith "Not Implemented"
 
 
     /// Directionally compares types; `other` can be more general than `this`.
@@ -190,7 +212,7 @@ module Type =
         let tryMatch other this = tryMatch f other this
         let res = f (this, other)
         let failStr msg = Error(msg |> Error.create)
-        let fail e = Error (e this other)
+        let fail e = Error(e this other)
 
         match this, other with
         | _, Unknown _ -> Ok res
@@ -225,28 +247,33 @@ module Type =
                 |> List.map (fun (t, o) -> t |> tryMatch o)
                 |> Result.collect
                 |> Result.map (List.concat)
-            else fail Error.``couldn't match tuples``
+            else
+                fail Error.``couldn't match tuples``
         | Record this, Record other ->
-            if this.Length = other.Length then    
+            if this.Length = other.Length then
                 this
                 |> List.map (fun (thisName, thisType) ->
                     other
                     |> List.map (fun (otherName, otherType) ->
                         if thisName = otherName then
                             thisType |> tryMatch otherType
-                        else failStr "")
+                        else
+                            failStr "")
                     |> List.filter Result.isOk
                     |> Result.collect
                     |> Result.bind (fun results ->
                         results
                         |> List.concat
                         |> List.tryHead
-                        |> Result.fromOption (Error.``couldn't match records because field`` thisName (Record this) (Record other))))
+                        |> Result.fromOption (
+                            Error.``couldn't match records because field`` thisName (Record this) (Record other)
+                        )))
                 |> Result.collect
-            else fail Error.``couldn't match records``
+            else
+                fail Error.``couldn't match records``
         | Union this, Union other -> // this :> other
             other
-            |> List.map (fun otherType -> 
+            |> List.map (fun otherType ->
                 this
                 |> List.map (fun thisType -> thisType |> tryMatch otherType)
                 |> List.filter Result.isOk
@@ -258,6 +285,11 @@ module Type =
                     |> Result.fromOption (Error.``couldn't match unions`` otherType (Union this) (Union other))))
             |> Result.collect
         | _ -> Error(Error.typeMismatch this other)
+
+    let equals other t = // TODO don't know if this is the correct implementation of equals for testing conditions in type statements
+        t 
+        |> tryMatch (fun _ -> []) other
+        |> Result.isOk
 
 type Type = Type.Type
 

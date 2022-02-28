@@ -5,6 +5,7 @@ open UntypedIr
 
 open Identifier
 open ResultExtensions
+open ListExtensions
 open Range
 
 
@@ -65,7 +66,9 @@ type State = { index: int }
 
 module State =
     let createUnknown this =
-        { this with State.index = this.index + 1 }, this.index |> (fun x -> Type.Unknown x)
+        { this with State.index = this.index + 1 },
+        this.index
+        |> (fun x -> Type.Unknown { Type.TUnknown.id = x })
 
 type IResult<'a> =
     | IOk of state: State * t: 'a * c: Constraints
@@ -77,6 +80,11 @@ module IResult =
         match result with
         | Ok t -> IOk(state, t, c)
         | Error e -> IErr e
+
+    let toResult iresult =
+        match iresult with
+        | IOk (state, t, c) -> Ok(state, t, c)
+        | IErr e -> Error e
 
     let bind (f: State -> _ -> _ IResult) (result: _ IResult) : _ IResult =
         match result with
@@ -137,42 +145,14 @@ module Solver =
             inner: Type *
             map: FunctionMapping
 
-    and TypeStatement = UnknownEquals of unknown: Type.Unknown * value: TypeExpression
+    and TypeStatement =
+        | UnknownEquals of unknown: Type.TUnknown * value: TypeExpression
+        | TypeEquals of t: Type * value: TypeExpression
 
     and FunctionMapping =
         | KeepLeft of inner: FunctionMapping
         | KeepRight of inner: FunctionMapping
         | KeepValue
-
-    let rec applyFunctionMapping mapping t =
-        match t, mapping with
-        | Type.Function (left, _), KeepLeft inner -> applyFunctionMapping inner left
-        | Type.Function (_, right), KeepRight inner -> applyFunctionMapping inner right
-        | t, KeepValue -> t
-        | _ -> failwith "Unreachable" // TODO test if this is actually unreachable
-
-    let rec solveTypeExpression (statements: TypeStatement list) expr : Result<Type, Range -> Type.Error> = // TODO where does range get added to Type.Error messages?
-        let solveTypeExpression = solveTypeExpression statements
-
-        match expr with
-        | OverloadFilterMap (overloads, filter, mapping) ->
-            let typeMatchesFilter filter t =
-                t
-                |> Type.tryMatch (fun _ -> []) filter
-                |> Result.isOk
-
-            result {
-                let! filter = solveTypeExpression filter
-
-                return!
-                    overloads
-                    |> List.filter (fun (_, t) -> typeMatchesFilter t filter)
-                    |> List.tryHead
-                    |> Result.fromOption (Type.Error.``cannot resolve overloaded type``)
-                    |> Result.map (fun (_uid, t) -> applyFunctionMapping mapping t) // TODO what to do with uid?
-            }
-
-        | ConstructorApp (args, bounds, env, inner, map) -> failwith ""
 
     let rec createTypeStatements (c: Constraint) : Result<TypeStatement list, Type.Error> =
         let fail e = Error(e c.outer c.inner c.range)
@@ -219,25 +199,88 @@ module Solver =
                 |> Result.map (fun args ->
                     createFunctionMappings x
                     |> List.map (fun (t, map) ->
+                        let expr = ConstructorApp(args, bounds, env, body, map)
+
                         match t with
-                        | Type.Unknown x -> UnknownEquals(x, ConstructorApp(args, bounds, env, body, map))
-                        | _ -> failwith "Not Implemented"))) // TODO implement testing statement for known types)
+                        | Type.Unknown x -> UnknownEquals(x, expr)
+                        | t -> TypeEquals(t, expr)))) // TODO consider splitting this into two lists, one has unknown equality, one has type equality to check
 
     // TODO not sure if this works
-    and createFunctionMappings' nextMapping x =
+    and private createFunctionMappings' nextMapping x =
         match x with
         | Type.Function (left, right) ->
             createFunctionMappings' (fun next -> KeepLeft next) left
             @ createFunctionMappings' (fun next -> KeepRight next) right
         | t -> [ t, nextMapping KeepValue ]
 
-    and createFunctionMappings x : (Type * FunctionMapping) list = createFunctionMappings' id x
+    and private createFunctionMappings x : (Type * FunctionMapping) list = createFunctionMappings' id x
 
-    let solve _ = failwith "" // TODO create the part that actually solves for a type given the generated type statements
+    let rec private applyFunctionMapping mapping t =
+        match t, mapping with
+        | Type.Function (left, _), KeepLeft inner -> applyFunctionMapping inner left
+        | Type.Function (_, right), KeepRight inner -> applyFunctionMapping inner right
+        | t, KeepValue -> t
+        | _ -> failwith "Unreachable" // TODO test if this is actually unreachable
+
+    let rec solveTypeExpression (statements: (int * TypeStatement) list) expr : Result<Type, Range -> Type.Error> = // TODO where does range get added to Type.Error messages?
+        let solveTypeExpression = solveTypeExpression statements
+
+        match expr with
+        | OverloadFilterMap (overloads, filter, mapping) ->
+            let typeMatchesFilter filter t =
+                t
+                |> Type.tryMatch (fun _ -> []) filter
+                |> Result.isOk
+
+            result {
+                let! filter = solveTypeExpression filter
+
+                return!
+                    overloads
+                    |> List.filter (fun (_, t) -> typeMatchesFilter t filter)
+                    |> List.tryHead
+                    |> Result.fromOption (Type.Error.``cannot resolve overloaded type``)
+                    |> Result.map (fun (_uid, t) -> applyFunctionMapping mapping t) // TODO what to do with uid?
+            }
+
+        | ConstructorApp (args, bounds, env, inner, map) -> failwith ""
+
+    and solve (statements: (int * TypeStatement) list) (visited: int list) (t: Type) : Result<Type, Range -> Type.Error> =
+        let mapping = // returns any errors that happen in a list
+            fun state tOriginal ->
+                match tOriginal with
+                | Type.Unknown x ->
+                    statements
+                    |> List.filterMap (fun (index, stmt) ->
+                        match stmt with
+                        | UnknownEquals (x1, expr) ->
+                            if visited |> List.contains index |> not
+                               && Type.TUnknown.equals x x1 then
+                                Some expr
+                            else
+                                None
+                        | _ -> None)
+                    |> List.tryHead
+                    |> Result.fromOption (Type.Error.insufficientInformation)
+                    |> Result.bind (fun expr -> solveTypeExpression statements expr)
+                    |> fun result ->
+                        match result with
+                        | Ok t -> state, t
+                        | Error e -> e :: state, tOriginal
+                | t -> state, t
+
+        t
+        |> Type.mapContained mapping ([])
+        |> fun (errors, t) ->
+            if errors.Length = 0 then
+                Ok t
+            else
+                errors |> List.head |> Error
 
 [<RequireQualifiedAccess>]
 module Inference =
-    let rec infer (expr: Expr) (state: State) (constraintFn: Type -> Env -> Constraints) (env: Env) : Type IResult =
+    /// Gets the unsolved type of an expressions, along with the constraints needed to solve the type.
+    let rec inferUnsolvedType (expr: Expr) (state: State) (constraintFn: Type -> Env -> Constraints) (env: Env) : Type IResult =
 
         match expr with
         | Expr.Ident ident ->
@@ -249,13 +292,13 @@ module Inference =
 
         | Expr.Cond (guard, th, el) ->
             env
-            |> infer guard state (I.Constrain.refineTo (Type.Primitive Type.Bool))
+            |> inferUnsolvedType guard state (I.Constrain.refineTo (Type.Primitive Type.Bool))
             |> IResult.bind (fun state _ ->
                 env
-                |> infer th state I.noConstraints
+                |> inferUnsolvedType th state I.noConstraints
                 |> IResult.bind (fun state thenType ->
                     env
-                    |> infer el state (I.Constrain.refineTo thenType) // thenType :> type(else)
+                    |> inferUnsolvedType el state (I.Constrain.refineTo thenType) // thenType :> type(else)
                     |> IResult.mapType (fun _ -> thenType)))
 
         | Expr.Tuple xs ->
@@ -264,7 +307,7 @@ module Inference =
                 | [] -> IResult.ret state []
                 | x :: xs ->
                     env
-                    |> infer x state I.noConstraints
+                    |> inferUnsolvedType x state I.noConstraints
                     |> IResult.bind (fun state t ->
                         inferXs state xs
                         |> IResult.mapType (fun ts -> t :: ts))
@@ -278,21 +321,21 @@ module Inference =
             |> IResult.bind (fun state pType ->
                 env
                 |> Env.extend p pType
-                |> infer expr state I.noConstraints
+                |> inferUnsolvedType expr state I.noConstraints
                 |> IResult.mapType (fun rType -> Type.Function(pType, rType)))
 
         | Expr.Type (expr, t) ->
             env
             // TODO Needs to extend environment with universally quantified vars
-            |> infer expr state (I.Constrain.refineTo t) // t :> type(expr)
+            |> inferUnsolvedType expr state (I.Constrain.refineTo t) // t :> type(expr)
 
         | Expr.Tagged (expr, range) ->
             env
             |> Env.setCurrentRange range
-            |> infer expr state constraintFn
+            |> inferUnsolvedType expr state constraintFn
         | Expr.Ref (expr) ->
             env
-            |> infer expr state I.noConstraints
+            |> inferUnsolvedType expr state I.noConstraints
             |> IResult.mapType (fun t -> Type.Reference t)
 
         | Expr.App (f, x) ->
@@ -300,12 +343,12 @@ module Inference =
             |> I.createUnknown
             |> IResult.bind (fun state rType ->
                 env
-                |> infer x state I.noConstraints
+                |> inferUnsolvedType x state I.noConstraints
                 |> IResult.bind (fun state xType ->
                     let iType = Type.Function(xType, rType)
 
                     env
-                    |> infer f state (I.Constrain.refineFrom iType) // type(f) :> iType
+                    |> inferUnsolvedType f state (I.Constrain.refineFrom iType) // type(f) :> iType
                     |> IResult.mapType (fun _ -> rType)))
 
         | Expr.Let (name, expr, body) -> failwith "Not Implemented" // this finishes type inference
@@ -324,3 +367,25 @@ module Inference =
         | Expr.Match (expr, case) -> failwith "Not Implemented"
 
         |> IResult.map (fun state t -> state, t, constraintFn t env)
+
+    and infer (expr: Expr) (state: State) (constrainer: Type -> Env -> Constraints) (env: Env) : Type IResult =
+        inferUnsolvedType expr state constrainer env
+        |> IResult.toResult
+        |> Result.bind (fun (state, t, cs) ->
+            result {
+                let! statements =
+                    cs
+                    |> List.map (fun c -> Solver.createTypeStatements c)
+                    |> Result.collect
+                    |> Result.map (fun rs -> rs |> List.concat |> List.indexed)
+
+                let! solvedType =
+                    Solver.solve statements [] t
+                    |> Result.mapError (fun e -> e env.currentRange) // TODO is this where range comes from?
+
+                return solvedType, state
+            })
+        |> fun res ->
+            match res with
+            | Ok (t, state) -> IOk(state, t, []) // TODO does this return no constraints or does cs also need to get passed
+            | Error e -> IErr e

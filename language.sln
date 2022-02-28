@@ -3,13 +3,17 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31919.166
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Parser", "Parser\Parser.fsproj", "{4509C110-40E0-47F5-AD93-423FDD043E57}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Parser", "src\Parser\Parser.fsproj", "{4509C110-40E0-47F5-AD93-423FDD043E57}"
 EndProject
-Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Parser.Tests", "Parser.Tests\Parser.Tests.fsproj", "{D39C9137-4CCB-428B-879D-2F2C0762DA4F}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Parser.Tests", "test\Parser.Tests\Parser.Tests.fsproj", "{D39C9137-4CCB-428B-879D-2F2C0762DA4F}"
 EndProject
-Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Shared", "Shared\Shared.fsproj", "{BF0CD2CC-76F1-44F8-95F7-F0850B28F03E}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Shared", "src\Shared\Shared.fsproj", "{BF0CD2CC-76F1-44F8-95F7-F0850B28F03E}"
 EndProject
-Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Typing", "Typing\Typing.fsproj", "{A4F30610-FA1F-4169-B277-F59039E9858D}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Typing", "src\Typing\Typing.fsproj", "{A4F30610-FA1F-4169-B277-F59039E9858D}"
+EndProject
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Typing.Tests", "test\Typing.Tests\Typing.Tests.fsproj", "{E5A226AA-9C39-4E91-A607-7D1F017A67AC}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "test", "test", "{4978BE17-44B7-4B87-9FF4-C35A178268AB}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -33,9 +37,17 @@ Global
 		{A4F30610-FA1F-4169-B277-F59039E9858D}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A4F30610-FA1F-4169-B277-F59039E9858D}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A4F30610-FA1F-4169-B277-F59039E9858D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E5A226AA-9C39-4E91-A607-7D1F017A67AC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E5A226AA-9C39-4E91-A607-7D1F017A67AC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E5A226AA-9C39-4E91-A607-7D1F017A67AC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E5A226AA-9C39-4E91-A607-7D1F017A67AC}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{D39C9137-4CCB-428B-879D-2F2C0762DA4F} = {4978BE17-44B7-4B87-9FF4-C35A178268AB}
+		{E5A226AA-9C39-4E91-A607-7D1F017A67AC} = {4978BE17-44B7-4B87-9FF4-C35A178268AB}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {1FBBD6F2-F760-4C2C-B212-54CC191D9971}

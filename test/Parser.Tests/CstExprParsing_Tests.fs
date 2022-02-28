@@ -1,4 +1,4 @@
-﻿module CstExprParsing_Tests
+﻿module CstExprParsing.Tests
 
 open NUnit.Framework
 open FParsec

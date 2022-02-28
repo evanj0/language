@@ -5,18 +5,13 @@
 
     <IsPackable>false</IsPackable>
     <GenerateProgramFile>false</GenerateProgramFile>
+    <OutputType>Exe</OutputType>
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="CstTypeParsing_Tests.fs" />
-    <Compile Include="CstPatternParsing_Tests.fs" />
-    <Compile Include="CstExprParsing_Tests.fs" />
-    <Compile Include="CstModuleParsing_Tests.fs" />
-    <Compile Include="Cst2Ast_Tests.fs" />
+    <Compile Include="Inference_Tests.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
-
-  <ItemGroup />
 
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.11.0" />
@@ -26,7 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Parser\Parser.fsproj" />
+    <ProjectReference Include="..\..\src\Typing\Typing.fsproj" />
   </ItemGroup>
 
 </Project>

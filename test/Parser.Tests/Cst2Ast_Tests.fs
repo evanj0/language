@@ -1,4 +1,4 @@
-﻿module Cst2Ast_Tests
+﻿module Cst2Ast.Tests
 
 open NUnit.Framework
 open FParsec

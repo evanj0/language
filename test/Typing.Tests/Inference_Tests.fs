@@ -16,7 +16,7 @@ let tryInfer expr =
             [ function1Name, function1Type ]
         let env = { Env.currentRange = Range.create pos pos; globals = globals; locals = []; }
         let! resultT = 
-            Inference.infer expr { State.index = 0 } (fun t env -> []) env
+            Inference.infer expr { State.index = 0 } (fun _t _env -> []) env
             |> IResult.toResult
             |> Result.map (fun (_state, t, _cs) -> t)
         return resultT

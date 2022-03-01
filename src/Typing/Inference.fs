@@ -136,7 +136,7 @@ module private I =
 module Solver =
     type TypeExpression =
         | Type of t: Type
-        | OverloadFilterMap of overloads: (Uid * Type) list * filter: TypeExpression * map: FunctionMapping
+        | OverloadFilterMap of overloads: Type list * filter: TypeExpression * map: FunctionMapping
         /// `env` needs to be set since the default value when pulling this from the AST is `[]`.
         | ConstructorApp of
             args: (Type.TVariable * Type) list *
@@ -236,16 +236,16 @@ module Solver =
 
             result {
                 let! filter = solveTypeExpression filter
-
                 return!
                     overloads
-                    |> List.filter (fun (_, t) -> typeMatchesFilter t filter)
+                    |> List.filter (fun (t) -> typeMatchesFilter t filter)
                     |> List.tryHead
                     |> Result.fromOption (Type.Error.``cannot resolve overloaded type``)
-                    |> Result.map (fun (_uid, t) -> applyFunctionMapping mapping t) // TODO what to do with uid?
+                    |> Result.map (fun (t) -> applyFunctionMapping mapping t) // TODO what to do with uid?
             }
 
         | ConstructorApp (args, bounds, env, inner, map) -> failwith ""
+        | Type (t) -> solve statements [] t // Passthrough
 
     and solve (statements: (int * TypeStatement) list) (visited: int list) (t: Type) : Result<Type, Range -> Type.Error> =
         let mapping = // returns any errors that happen in a list
@@ -267,7 +267,11 @@ module Solver =
                     |> Result.bind (fun expr -> solveTypeExpression statements expr)
                     |> fun result ->
                         match result with
-                        | Ok t -> state, t
+                        | Ok t -> 
+                            let errors = verify statements
+                            if errors |> List.length = 1 then
+                                (errors |> List.head) :: state, t // TODO figure out a better way to do this than an if statement
+                            else state, t
                         | Error e -> e :: state, tOriginal
                 | t -> state, t
 
@@ -279,7 +283,7 @@ module Solver =
             else
                 errors |> List.head |> Error
 
-    let verifyStatement statements expected expr : Result<unit, Range -> Type.Error> =
+    and verifyStatement statements expected expr : Result<unit, Range -> Type.Error> =
         result {
             let! actual = solveTypeExpression statements expr
             if expected |> Type.equals actual then
@@ -288,7 +292,7 @@ module Solver =
                 return! Error(Type.Error.expectedTypeMismatch actual expected)
         }
 
-    let verify statements =
+    and verify statements =
         statements
         |> List.map (fun (_index, stmt) ->
             match stmt with

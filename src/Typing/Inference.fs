@@ -26,7 +26,7 @@ type Constraint = Constraint.Constraint
 type Constraints = Constraint list
 
 type Env =
-    { globals: (Ident * Uid * Type) list
+    { globals: (Ident * Type) list
       locals: (Ident * Type) list
       currentRange: Range }
 
@@ -45,20 +45,22 @@ module Env =
             |> List.filter (fun (x, _) -> x |> Ident.contains ident)
             |> List.map (fun (_, x) -> x)
             |> List.tryHead
-            |> Result.fromOption (Type.Error.``overloaded value not found`` ident (this |> currentRange))
+            |> Result.fromOption (Type.Error.``overloaded value not found`` ident (this |> currentRange)) // TODO fix this error handling
 
         if local |> Result.isOk then
             local
         else
-            let globals =
-                this.globals
-                |> List.filter (fun (x, _, _) -> x |> Ident.contains ident)
-                |> List.map (fun (_, id, x) -> id, x)
+            this.globals
+            |> List.filter (fun (i, _t) -> i |> Ident.contains ident)
+            |> List.map (fun (_i, t) -> t)
 
-            if globals.Length >= 1 then
-                Ok(Type.Overloaded globals)
-            else
-                local
+            |> fun list ->
+                if list.Length = 1 then
+                    list |> List.head |> Ok
+                else if list.Length = 0 then 
+                    Error (Type.Error.``overloaded value not found`` ident (this |> currentRange))
+                else
+                    Ok (Type.Overloaded list)
 
 type State = { index: int }
 
@@ -175,7 +177,7 @@ module Solver =
             if Type.TVariable.equals var1 var2 then
                 Ok []
             else
-                fail2 Type.Error.``couldn't match the type variable with`` var1 var2
+                fail2 Type.Error.``couldn't match the type variable with`` var1 var2 // TODO consider moving this to the solver since this function should not check any cases beyond separable types, just generate the statements to evaluate
         | Type.Constructor (args, bounds, env, body), x ->
             body
             |> Type.tryMatch
@@ -202,6 +204,8 @@ module Solver =
                         match t with
                         | Type.Unknown x -> UnknownEquals(x, expr)
                         | t -> TypeEquals(t, expr)))) // TODO consider splitting this into two lists, one has unknown equality, one has type equality to check
+        // TODO add other cases
+        | t, t2 -> Ok ([ TypeEquals(t, Type t2) ])
 
     // TODO not sure if this works
     and private createFunctionMappings' nextMapping x =
@@ -275,6 +279,24 @@ module Solver =
             else
                 errors |> List.head |> Error
 
+    let verifyStatement statements expected expr : Result<unit, Range -> Type.Error> =
+        result {
+            let! actual = solveTypeExpression statements expr
+            if expected |> Type.equals actual then
+                return ()
+            else
+                return! Error(Type.Error.expectedTypeMismatch actual expected)
+        }
+
+    let verify statements =
+        statements
+        |> List.map (fun (_index, stmt) ->
+            match stmt with
+            | TypeEquals (expected, expr) ->
+                verifyStatement statements expected expr
+            | _ -> Ok ())
+        |> List.filterMap Result.getErrorValue
+
 [<RequireQualifiedAccess>]
 module Inference =
     /// Gets the unsolved type of an expressions, along with the constraints needed to solve the type.
@@ -287,6 +309,7 @@ module Inference =
             // TODO also decide if env will be set in constructors here or somewhere else
             |> I.getType ident state
         | Expr.Literal (Literal.Str _) -> IResult.ret state (Type.Primitive Type.Str)
+        | Expr.Literal (Literal.Int _) -> IResult.ret state (Type.Primitive Type.Int)
 
         | Expr.Cond (guard, th, el) ->
             env

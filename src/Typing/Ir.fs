@@ -7,6 +7,9 @@ open ResultExtensions
 open Range
 
 type Uid = { index: int }
+[<RequireQualifiedAccess>]
+module Uid =
+    let print uid = sprintf "%d" uid.index
 
 [<RequireQualifiedAccess>]
 module Literal =
@@ -37,7 +40,9 @@ module Type =
         | Unknown of id: TUnknown
         | Variable of id: TVariable
         | Named of name: Ident * env: (Ident * Type)
-        | Overloaded of overloads: (Uid * Type) list
+        /// This is meant for overloaded types. Having this info later might be useful.
+        | Tagged of uid: Uid * inner: Type
+        | Overloaded of overloads: Type list
         | Constructor of args: TVariable list * bounds: Bound list * env: (Ident * Type) list * body: Type
         | Opaque of name: Ident * inner: Type
         | Unsafe of inner: Type
@@ -61,7 +66,17 @@ module Type =
           functionName: string
           t: Type }
 
-    let print (this: Type) = ""
+    let rec print (this: Type) = 
+        match this with
+        | Primitive Str -> "Str"
+        | Primitive Int -> "Int"
+        | Primitive Real -> "Real"
+        | Primitive Char -> "Char"
+        | Primitive Bool -> "Bool"
+        | Unknown x -> sprintf "<unknown`%d>" x.id
+        | Function (left, Function (rightl, rightr)) -> sprintf "%s -> (%s -> %s)" (print left) (print rightl) (print rightr)
+        | Function (left, right) -> sprintf "%s -> %s" (print left) (print right)
+        | Tagged (uid, inner) -> sprintf "%s`%s" (print inner) (Uid.print uid)
 
     type Error =
         { message: string
@@ -91,6 +106,10 @@ module Type =
             ("Couldn't infer the type based on provided information.",
              "The type of: each expression in a block, the value in a binding expression, and the value in an unsafe binding expression need to be fully inferrable.")
             |> createWithNote
+
+        let expectedTypeMismatch actual expected =
+            sprintf "Couldn't match type `%s` with the expected type `%s`." (print actual) (print expected)
+            |> create
 
         let ``value not found`` ident =
             sprintf "The value `%s` is not defined in the local or module scope." (Ident.print ident)
@@ -191,7 +210,7 @@ module Type =
             let state, ts = substElements id (fun _ -> id) state variants
             state, Union ts
         | Overloaded overloads ->
-            substElements (fun (_, t) -> t) (fun (n, _) t -> n, t) state overloads
+            substElements id (fun _ t -> t) state overloads
             |> fun (state, xs) -> state, Overloaded xs
         | Constructor (args, bounds, env, body) ->
             // map through body and add to a new list an argument if the mapping hits a variable that is in
@@ -199,6 +218,8 @@ module Type =
             // env should not be touched
             // bounds need to be updated
             failwith "Not Implemented"
+        // TODO check for other cases where the type can contain other types
+        | t -> mapping state t
 
 
     /// Directionally compares types; `other` can be more general than `this`.

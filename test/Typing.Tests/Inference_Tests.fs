@@ -3,12 +3,18 @@ module Inference.Tests
 open ResultExtensions
 open Range
 open Ir
+open Identifier
 open NUnit.Framework
+
+let function1Name = Ident.fromString "function1"
+let function1Type = Type.Function (Type.Primitive Type.Int, Type.Primitive Type.Int)
 
 let tryInfer expr =
     result {
         let pos = { Position.column = 0; line = 0; index = 0 }
-        let env = { Env.currentRange = Range.create pos pos; globals = []; locals = []; }
+        let globals = 
+            [ function1Name, function1Type ]
+        let env = { Env.currentRange = Range.create pos pos; globals = globals; locals = []; }
         let! resultT = 
             Inference.infer expr { State.index = 0 } (fun t env -> []) env
             |> IResult.toResult
@@ -24,8 +30,16 @@ let test expr t =
         Assert.True(t |> Type.equals resultT)
     | Error e -> Assert.Fail(sprintf "Message: %s\nNote: %s\nRange: %s\n" e.message e.note e.range.Display)
 
-[<TestFixture>]
 module Literals =
     open UntypedIr
     [<Test>]
     let ``string literal``() = test (Expr.Literal (Literal.Str "string literal")) (Type.Primitive Type.Str)
+
+module OverloadsAndFunctions =
+    open UntypedIr
+    [<Test>]
+    let ``non-overloaded function``() = test (Expr.Ident function1Name) function1Type
+
+    [<Test>]
+    let ``non-overloaded function application``() = test (Expr.App (Expr.Ident function1Name, Expr.Literal (Literal.Int 0))) (Type.Primitive Type.Int)
+    

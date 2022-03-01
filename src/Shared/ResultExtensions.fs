@@ -35,3 +35,13 @@ module Result =
     let isOk this = match this with Ok _ -> true | Error _ -> false
 
     let isError this = not (isOk this)
+
+    let getOkValue result = 
+        match result with 
+        | Ok x -> Some x 
+        | _ -> None
+
+    let getErrorValue result =
+        match result with
+        | Ok _ -> None
+        | Error e -> Some e

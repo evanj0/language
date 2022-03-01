@@ -28,9 +28,7 @@ type Constraints = Constraint list
 type Env =
     { globals: (Ident * Uid * Type) list
       locals: (Ident * Type) list
-      opaqueTypes: (Ident * Type) list
-      currentRange: Range
-      unknownIndex: int }
+      currentRange: Range }
 
 [<RequireQualifiedAccess>]
 module Env =

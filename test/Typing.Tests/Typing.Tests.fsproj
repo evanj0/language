@@ -22,6 +22,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Typing\Typing.fsproj" />
+    <ProjectReference Include="..\..\src\Shared\Shared.fsproj" />
   </ItemGroup>
 
 </Project>

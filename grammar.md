@@ -181,16 +181,20 @@ lambda_branch =
 
 sub_expr = 
     | Let
+    | UnsafeLet
     | Conditional
     | Reference
+    | Dereference
     | Mutate
     | Ordered ;
 Let = 'let', space, ident, space, '=', opt_space, expr ;
+UnsafeLet = 'let!', space, ident, space, '=', opt_space, expr ;
 Conditional = 
     'if', opt_space, expr, opt_space, 
     'then', opt_space, expr, opt_space, 
     'else', opt_space, expr ;
 Reference = 'ref', opt_space, expr ;
+Dereference = 'deref' opt_space, expr ;
 Mutate = 'mut', opt_space, expr, opt_space, '<-', opt_space, expr ;
 Ordered = sub_expr_e;
 

@@ -23,6 +23,7 @@ module Expr =
         | UnsafeLet of name: string * expr: Expr * body: Expr
         | Cond of guard: Expr * th: Expr * el: Expr
         | Ref of expr: Expr
+        | Deref of expr: Expr
         | Mut of expr: Expr * value: Expr
         | Func of p: string * body: Expr
         | Match of expr: Expr * case: Case

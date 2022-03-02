@@ -26,29 +26,40 @@ module Type =
     type TUnknown = { id: int }
 
     module TUnknown =
+        let create id = { TUnknown.id = id }
+
         let equals (a: TUnknown) b = a.id = b.id
 
     type TVariable = { id: int }
 
     [<RequireQualifiedAccess>]
     module TVariable =
+        let create id = { TVariable.id = id }
+
         let equals (a: TVariable) b = a.id = b.id
 
         let print (var: TVariable) = "" // TODO implement
 
     type Type =
+        /// Type inference variable. 
         | Unknown of id: TUnknown
+        /// Type variable in a type constructor body. This being separate from inference variables means that
+        /// instantiation is not necessary.
         | Variable of id: TVariable
-        | Named of name: Ident * env: (Ident * Type)
+        /// Named abstraction. Needed for recursive types.
+        | Named of name: Ident * env: (Ident * Type) list
         /// This is meant for overloaded types. Having this info later might be useful.
         | Tagged of uid: Uid * inner: Type
+        /// Overloads of a function are put into this to prevent shadowing.
         | Overloaded of overloads: Type list
         | Constructor of args: TVariable list * bounds: Bound list * env: (Ident * Type) list * body: Type
-        | Opaque of name: Ident * inner: Type
+        /// Construct the type with the arguments.
+        | Construct of args: (TVariable * Type) list * ctor: Type
+        /// This is probably needed for having named abstractions that cannot be casted back to the structural type.
+        | Opaque of inner: Type
         | Unsafe of inner: Type
         | Reference of inner: Type
         | Primitive of Primitive
-        | Conforming
         | Function of left: Type * right: Type
         | Tuple of elements: Type list
         | Record of elements: (string * Type) list
@@ -77,6 +88,8 @@ module Type =
         | Function (left, Function (rightl, rightr)) -> sprintf "%s -> (%s -> %s)" (print left) (print rightl) (print rightr)
         | Function (left, right) -> sprintf "%s -> %s" (print left) (print right)
         | Tagged (uid, inner) -> sprintf "%s`%s" (print inner) (Uid.print uid)
+        | Reference inner -> sprintf "%s&" (print inner)
+        | Unsafe inner -> sprintf "%s!" (print inner)
 
     type Error =
         { message: string
@@ -109,6 +122,18 @@ module Type =
 
         let expectedTypeMismatch actual expected =
             sprintf "Couldn't match type `%s` with the expected type `%s`." (print actual) (print expected)
+            |> create
+
+        let namedTypeNotFound name =
+            sprintf "Couldn't find a definition for named type abstraction `%s` in the current scope." (Ident.print name)
+            |> create
+
+        let notATypeConstructor t =
+            sprintf "Type `%s` is not a type constructor." (print t)
+            |> create
+
+        let insufficientTypeArgs arg ctor =
+            sprintf "Couldn't construct type `%s` because one or more type arguments are missing, namely `%s`." (print ctor) (TVariable.print arg)
             |> create
 
         let ``value not found`` ident =
@@ -237,17 +262,12 @@ module Type =
 
         match this, other with
         | _, Unknown _ -> Ok res
-        | _, Conforming -> Ok res
         | Variable a, Variable b ->
             if a = b then
                 Ok res
             else
                 Error(Error.``couldn't match variable`` a b)
-        | Opaque (thisName, thisInner), Opaque (otherName, otherInner) ->
-            if Ident.equals thisName otherName then
-                thisInner |> tryMatch otherInner
-            else
-                Error(Error.``couldn't match name`` thisName otherName)
+        | Opaque this, Opaque other -> this |> tryMatch other
         | Primitive Str, Primitive Str -> Ok res
         | Primitive Int, Primitive Int -> Ok res
         | Primitive Real, Primitive Real -> Ok res
@@ -307,10 +327,61 @@ module Type =
             |> Result.collect
         | _ -> Error(Error.typeMismatch this other)
 
-    let equals other t = // TODO don't know if this is the correct implementation of equals for testing conditions in type statements
+    let equals other t = // TODO fix
         t 
         |> tryMatch (fun _ -> []) other
         |> Result.isOk
+
+    let subst var newType t =
+        t 
+        |> mapContained
+            (fun state t1 ->
+                match t1 with
+                | Type.Variable v1 -> 
+                    if TVariable.equals var v1 then
+                        state, newType
+                    else
+                        state, t1
+                | _ -> state, t1)
+            ()
+        |> fun (_, t) -> t
+
+    let substUnknown x newType t =
+        t
+        |> mapContained
+            (fun state t1 ->
+                match t1 with
+                | Type.Unknown x1 -> 
+                    if TUnknown.equals x x1 then
+                        state, newType
+                    else
+                        state, t1
+                | _ -> state, t1)
+            ()
+        |> fun (_, t) -> t
+
+    let gen t env =
+        t
+        |> mapContained
+            (fun state t1 ->
+                match t1 with
+                | Type.Unknown var -> 
+                    if state |> List.contains var then
+                        state, t1
+                    else var :: state, t1
+                | _ -> state, t1)
+            []
+        |> fun (state, t) ->
+            let substitutions =
+                state
+                |> List.indexed
+                |> List.map (fun (index, x) -> x, TVariable.create index)
+            let newT =
+                substitutions
+                |> List.map (fun (x, var) -> x, Type.Variable var)
+                |> List.fold (fun acc (x, t) -> acc |> substUnknown x t) t
+            let args = substitutions |> List.map (fun (_x, var) -> var)
+            Type.Constructor(args, [], env, newT)
 
 type Type = Type.Type
 

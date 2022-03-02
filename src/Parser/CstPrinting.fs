@@ -207,10 +207,14 @@ and subExpr this =
     match this with
     | Let (_, s1, id, s2, s3, e) -> 
         ["let"; space s1; ident id; space s2; "="; space s3; expr e]
+    | UnsafeLet (_, s1, id, s2, s3, e) ->
+        [sprintf "let!%s%s%s=%s%s" (space s1) (ident id) (space s2) (space s3) (expr e)]
+    | UnsafeDo (_, s, e) -> [sprintf "do!%s%s" (space s) (expr e)]
     | Conditional ((_, s1, e1, s2), (_, s3, e2, s4), (_, s5, e3)) -> 
         ["if"; space s1; expr e1; space s2; "then"; space s3; expr e2; space s4; "else"; space s5; expr e3]
     | Reference (_, s, e) -> 
         ["ref"; space s; expr e]
+    | Dereference (_, s, e) -> [sprintf "deref%s%s" (space s) (expr e)]
     | Mutate (_, s1, e1, s2, s3, e2) ->
         ["mut"; space s1; expr e1; space s2; "<-"; space s3; expr e2]
     | Ordered x -> [subExprE x]

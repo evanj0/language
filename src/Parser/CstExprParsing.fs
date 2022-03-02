@@ -62,20 +62,26 @@ let subExprU = pUpdate
 let pExplicitType = subExprU .>>. many (delim (pchar ':') .>>. quantifiedType) |>> ExplicitType
 let subExprE = pExplicitType
 
-let pLet = pstringpos "let" .>>. space .>>. ident .>>. space .>> pchar '=' .>>. optSpace .>>. expr |>> tup6 |>> subExpr.Let
+let pLet = pstringpos "let" .>>.? space .>>. ident .>>. space .>> pchar '=' .>>. optSpace .>>. expr |>> tup6 |>> subExpr.Let
+let pUnsafeLet = pstringpos "let!" .>>. space .>>. ident .>>. space .>> pchar '=' .>>. optSpace .>>. expr |>> tup6 |>> subExpr.UnsafeLet
+let pUnsafeDo = pstringpos "do!" .>>. space .>>. expr |>> tup3 |>> subExpr.UnsafeDo
 let guardBranch = pstringpos "if" .>>. optSpace .>>. expr .>>. optSpace |>> tup4
 let thenBranch = pstringpos "then" .>>. optSpace .>>. expr .>>. optSpace |>> tup4
 let elseBranch = pstringpos "else" .>>. optSpace .>>. expr |>> tup3
 let pConditional = guardBranch .>>. thenBranch .>>. elseBranch |>> tup3 |>> subExpr.Conditional
 let pReference = pstringpos "ref" .>>. optSpace .>>. expr |>> tup3 |>> subExpr.Reference
+let pDereference = pstringpos "deref" .>>. optSpace .>>. expr |>> tup3 |>> subExpr.Dereference
 let pMutate = 
     pstringpos "mut" .>>. optSpace .>>. expr .>>. optSpace .>> pstring "<-" .>>. optSpace .>>. expr 
     |>> tup6 |>> subExpr.Mutate
 let pOrdered = subExprE |>> subExpr.Ordered
 let subExpr = 
     pLet 
+    <|> pUnsafeLet
+    <|> pUnsafeDo
     <|> pConditional 
     <|> pReference 
+    <|> pDereference
     <|> pMutate 
     <|> pOrdered
 

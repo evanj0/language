@@ -241,12 +241,21 @@ and subExpr (x: subExpr): Ast.Expression.Expression =
     | Let (kw, _, id, _, _, e) -> 
         let astE = expr e
         Ast.Expression.create (Ast.Expression.Let (ident id, astE)) kw.start astE.range.stop
+    | UnsafeLet (kw, _, id, _, _, e) ->
+        let astE = expr e
+        Ast.Expression.create (Ast.Expression.UnsafeLet (ident id, astE)) kw.start astE.range.stop
+    | UnsafeDo (kw, _, e) ->
+        let astE = expr e
+        Ast.Expression.create (Ast.Expression.UnsafeDo astE) kw.start astE.range.stop
     | Conditional ((kw, _, e1, _), (_, _, e2, _), (_, _, e3)) -> 
         let astE3 = expr e3
         Ast.Expression.create (Ast.Expression.Conditional (expr e1, expr e2, astE3)) kw.start astE3.range.stop
     | Reference (kw, _, e) ->
         let astE = expr e
         Ast.Expression.create (Ast.Expression.Reference astE) kw.start astE.range.stop
+    | Dereference (kw, _, e) ->
+        let astE = expr e
+        Ast.Expression.create (Ast.Expression.Dereference astE) kw.start astE.range.stop
     | Mutate (kw, _, e1, _, _, e2) ->
         let astE2 = expr e2
         Ast.Expression.create (Ast.Expression.Mutate (expr e1, astE2)) kw.start astE2.range.stop

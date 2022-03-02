@@ -23,6 +23,10 @@ let ``lambda with three branches``() = test "| x y -> x | a b -> a | x xs -> (x,
 
 [<Test>]
 let ``let``() = test "let variable = a value"
+[<Test>]
+let ``unsafe let``() = test "let! variable = unsafe operation"
+[<Test>]
+let ``unsafe do``() = test "do! an unsafe operation"
 
 [<Test>]
 let ``conditional``() = test "if condition then result else other result"
@@ -31,6 +35,8 @@ let ``conditional nested``() = test "if condition then result else if other cond
 
 [<Test>]
 let ``reference``() = test "ref result of an expression"
+[<Test>]
+let ``dereference``() = test "deref before passing parameter"
 
 [<Test>]
 let ``mutate``() = test "mut result of an expression <- result of another expression"

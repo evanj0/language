@@ -108,10 +108,17 @@ module Expression =
         | Application of left: Expression * right: Expression
 
         | Let of name: Ident * value: Expression
+        | UnsafeLet of name: Ident * value: Expression
+        | UnsafeDo of proc: Expression
         | Conditional of guard: Expression * thenBranch: Expression * elseBranch: Expression
         | Reference of expr: Expression
+        | Dereference of expr: Expression
         | Mutate of expr: Expression * value: Expression
 
+        // TODO move to the higher level function generator notion of pattern matching/lambda
+        | Lambda of branches: (Pattern * Expression) list
+
+        // TODO get rid of these
         | Function of parameter: Ident * body: Expression
         | Match of expr: Expression * cases: (Pattern * Expression) list
 

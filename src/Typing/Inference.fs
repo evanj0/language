@@ -154,6 +154,21 @@ module Solver =
         | KeepRight of inner: FunctionMapping
         | KeepValue
 
+    let constructType args ctor : Result<Type, Range -> Type.Error> =
+        match ctor with
+        | Type.Constructor (eArgs, bounds, env, body) -> 
+            eArgs
+            |> List.map (fun eName ->
+                args
+                |> List.tryFind (fun (name, _t) -> Type.TVariable.equals name eName)
+                |> Result.fromOption (Type.Error.insufficientTypeArgs eName ctor))
+            |> Result.collect
+            // TODO check that bounds are met here
+            |> Result.map (fun args ->
+                args
+                |> List.fold (fun acc (var, t) -> acc |> Type.subst var t) body)
+        | _ -> Error (Type.Error.notATypeConstructor ctor)
+
     /// Simplifies constraints by separating compound types (functions, tuples, records). 
     /// Does not compare the inner types; errors are produced only if there are conflicts in major types 
     /// (i.e., `(a, b) :> (a, b, c)` or `&a :> a`).
@@ -163,12 +178,24 @@ module Solver =
 
         let createNext outer inner = createTypeStatements (c |> Constraint.copyRange outer inner)
 
-        match c.outer, c.inner with
+        let addRange result = result |> Result.mapError (fun e -> e c.range)
+
+        match c.outer, c.inner with        
+        
+        // a -> b :> c -> d
+        // a :> c
+        // b :> d
         | Type.Function (outerL, outerR), Type.Function (innerL, innerR) ->
             [ createTypeStatements (c |> Constraint.copyRange outerL innerL)
               createTypeStatements (c |> Constraint.copyRange outerR innerR) ]
             |> Result.collect
             |> Result.map (fun xs -> List.concat xs)
+        
+        // (a1, a2, ..., an) :> (b1, b2, ..., bn)
+        // a1 :> b1
+        // a2 :> b2
+        // ...
+        // an :> bn
         | Type.Tuple outer, Type.Tuple inner ->
             if outer.Length = inner.Length then
                 List.zip outer inner
@@ -177,6 +204,56 @@ module Solver =
                 |> Result.map (fun xs -> List.concat xs)
             else
                 fail Type.Error.``couldn't match tuples``
+
+        // TODO record
+        // TODO union
+
+        // T :> a
+        // res(T) :> a
+        | Type.Named (name, env), innerT -> 
+            env
+            |> List.filter (fun (n, _) -> name |> Ident.equals n)
+            |> List.map (fun (_, t) -> t)
+            |> List.tryHead
+            |> Result.fromOption (Type.Error.namedTypeNotFound name c.range)
+            |> Result.bind (fun t -> createNext t innerT)
+        
+        // a :> T
+        // a :> res(T)
+        | outerT, Type.Named (name, env) ->
+            env
+            |> List.filter (fun (n, _) -> name |> Ident.equals n)
+            |> List.map (fun (_, t) -> t)
+            |> List.tryHead
+            |> Result.fromOption (Type.Error.namedTypeNotFound name c.range)
+            |> Result.bind (fun t -> createNext outerT t)
+        
+        // T<a> :> b
+        // cons(T, a) :> b
+        | Type.Construct (args, ctor), inner -> 
+            constructType args ctor
+            |> addRange
+            |> Result.bind (fun t -> createNext t inner)
+
+        // a :> T<b>
+        // a :> cons(T, b)
+        | outer, Type.Construct (args, ctor) ->
+            constructType args ctor
+            |> addRange
+            |> Result.bind (fun t -> createNext outer t)
+
+        // [T] :> [T]
+        // T :> T
+        | Type.Opaque outer, Type.Opaque inner -> createNext outer inner
+
+        // [T] :> a
+        // T :> a
+        | Type.Opaque outer, inner -> createNext outer inner
+
+        // <unknown> :> a
+        | Type.Unknown id, inner -> Ok [UnknownEquals(id, Type inner)]
+
+        // a :> <unknown>
         | outer, Type.Unknown id -> Ok [ UnknownEquals(id, Type outer) ]
         
         // a! :> b!
@@ -185,34 +262,21 @@ module Solver =
         // a& :> b&
         | Type.Reference outer, Type.Reference inner -> createNext outer inner
         
-        | Type.Constructor (args, bounds, env, body), x ->
+        // 
+        | Type.Constructor (args, bounds, env, body), inner ->
             body
-            // Compare `x` to `body` to get a list of variables and their pairings.
+            // Compare `x` to `body` to get type args.
             |> Type.tryMatch
                 (fun (bodyT, t) ->
                     match bodyT, t with
                     | Type.Variable var, t -> [ var, t ]
                     | _ -> [])
-                x
-            |> Result.mapError (fun e -> e c.range)
-            |> Result.bind (fun foundArgs ->
-                // Find args specified in constructor.
-                args
-                |> List.map (fun t ->
-                    foundArgs
-                    |> List.filter (fun (t1, _) -> Type.TVariable.equals t t1)
-                    |> List.tryHead
-                    |> Result.fromOption t)
-                |> Result.collect
-                |> Result.mapError (fun t -> Type.Error.``insufficient type arguments`` t c.range)
-                |> Result.map (fun args ->
-                    createFunctionMappings x
-                    |> List.map (fun (t, map) ->
-                        let expr = ConstructorApp(args, bounds, env, body, map)
-                        // Generate the correct type of statement.
-                        match t with
-                        | Type.Unknown x -> UnknownEquals(x, expr)
-                        | t -> TypeEquals(t, expr)))) // TODO consider splitting this into two lists, one has unknown equality, one has type equality to check
+                inner
+            |> addRange
+            |> Result.bind (fun substList -> 
+                constructType substList (Type.Constructor(args, bounds, env, body))
+                |> addRange
+                |> Result.bind (fun outer -> createNext outer inner))
         // TODO add other cases
         | t, t2 -> Ok ([ TypeEquals(t, Type t2) ])
 
@@ -277,11 +341,7 @@ module Solver =
                     |> Result.bind (fun expr -> solveTypeExpression statements expr)
                     |> fun result ->
                         match result with
-                        | Ok t -> 
-                            let errors = verify statements
-                            if errors |> List.length = 1 then
-                                (errors |> List.head) :: state, t // TODO figure out a better way to do this than an if statement
-                            else state, t
+                        | Ok t -> state, t
                         | Error e -> e :: state, tOriginal
                 | t -> state, t
 
@@ -293,7 +353,7 @@ module Solver =
             else
                 errors |> List.head |> Error
 
-    and verifyStatement statements expected expr : Result<unit, Range -> Type.Error> =
+    and verifyExpr statements expected expr : Result<unit, Range -> Type.Error> =
         result {
             let! actual = solveTypeExpression statements expr
             if expected |> Type.equals actual then
@@ -302,24 +362,32 @@ module Solver =
                 return! Error(Type.Error.expectedTypeMismatch actual expected)
         }
 
-    and verify statements =
+    and verify statements : Result<(int * TypeStatement) list, Range -> Type.Error> =
         statements
         |> List.map (fun (_index, stmt) ->
             match stmt with
             | TypeEquals (expected, expr) ->
-                verifyStatement statements expected expr
+                verifyExpr statements expected expr
             | _ -> Ok ())
         |> List.filterMap Result.getErrorValue
+        |> fun list ->
+            if list.Length = 0 then
+                Ok statements
+            else Error list.Head
+
+    and verifyAndSolve statements t =
+        verify statements
+        |> Result.bind (fun statements -> solve statements [] t)
 
 [<RequireQualifiedAccess>]
 module Inference =
+
     /// Gets the unsolved type of an expressions, along with the constraints needed to solve the type.
     let rec inferUnsolvedType (expr: Expr) (state: State) (constraintFn: Type -> Env -> Constraints) (env: Env) : Type IResult =
 
         match expr with
         | Expr.Ident ident ->
             env
-            // TODO this needs to instantiate types
             // TODO also decide if env will be set in constructors here or somewhere else
             |> I.getType ident state
         
@@ -405,20 +473,27 @@ module Inference =
                     |> inferUnsolvedType f state (I.Constrain.refineFrom iType)
                     |> IResult.mapType (fun _ -> rType)))
 
-        | Expr.Let (name, expr, body) -> failwith "Not Implemented" // this finishes type inference
+        | Expr.Let (name, expr, body) -> 
+            infer expr state I.noConstraints env
+            |> IResult.bind (fun state t ->
+                env
+                |> Env.extend name t
+                |> inferUnsolvedType body state I.noConstraints)
 
         | Expr.UnsafeLet (name, expr, body) ->
             state
             |> I.createUnknown
             |> IResult.bind (fun state eType ->
-                inferUnsolvedType expr state (I.Constrain.refineFrom (Type.Unsafe eType)) env
-                ) |> ignore // TODO this needs to finish inference
-            failwith "Not Implemented"
+                infer expr state (I.Constrain.refineFrom (Type.Unsafe eType)) env
+                |> IResult.bind (fun state t ->
+                    Env.extend name eType env
+                    |> inferUnsolvedType body state I.noConstraints))
+
+        | Expr.Block (expr, next) -> failwith "Not Implemented" // this finishes type inference for each line
 
         // TODO Implement
         | Expr.Literal (value) -> failwith "Not Implemented"
         | Expr.Record (elements) -> failwith "Not Implemented"
-        | Expr.Block (expr, next) -> failwith "Not Implemented" // this finishes type inference for each line
         | Expr.Extern (name, argument) -> failwith "Not Implemented"
         | Expr.NoRet -> failwith "Not Implemented"
         | Expr.Update (expr, fields) -> failwith "Not Implemented"
@@ -427,8 +502,10 @@ module Inference =
 
         |> IResult.map (fun state t -> state, t, constraintFn t env)
 
+    /// infer, verify, and solve type of `expr`. Applies `constrainer` to the solved type instead of passing
+    /// it to the inference of the inner expression.
     and infer (expr: Expr) (state: State) (constrainer: Type -> Env -> Constraints) (env: Env) : Type IResult =
-        inferUnsolvedType expr state constrainer env
+        inferUnsolvedType expr state I.noConstraints env
         |> IResult.toResult
         |> Result.bind (fun (state, t, cs) ->
             result {
@@ -439,12 +516,13 @@ module Inference =
                     |> Result.map (fun rs -> rs |> List.concat |> List.indexed)
 
                 let! solvedType =
-                    Solver.solve statements [] t
+                    Solver.verifyAndSolve statements t
                     |> Result.mapError (fun e -> e env.currentRange) // TODO is this where range comes from?
 
                 return solvedType, state
             })
         |> fun res ->
             match res with
-            | Ok (t, state) -> IOk(state, t, []) // TODO does this return no constraints or does cs also need to get passed
+            | Ok (t, state) -> IOk(state, t, [])
             | Error e -> IErr e
+        |> IResult.map (fun state t -> state, t, constrainer t env)

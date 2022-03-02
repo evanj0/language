@@ -140,8 +140,11 @@ and lambdaBranch = ckw * space * pattern * (space * pattern) list * space * spac
 
 and subExpr = 
     | Let of skw * space * ident: ident * space * space * expr: expr
+    | UnsafeLet of skw * space * ident: ident * space * space * expr: expr
+    | UnsafeDo of skw * space * expr: expr
     | Conditional of guardBranch * thenBranch * elseBranch
     | Reference of skw * space * expr: expr
+    | Dereference of skw * space * expr: expr
     | Mutate of skw * space * expr1: expr * space * space * expr2: expr
     | Ordered of subExprE
 and guardBranch = skw * space * expr * space

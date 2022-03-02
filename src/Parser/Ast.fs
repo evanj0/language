@@ -34,14 +34,16 @@ module Type =
           range: Range }
 
     and Type' = 
+        | Variable of name: string
+        | Named of ident: ResolvedIdent
+        | Application of ctor: Type * args: Type list
         | Primitive of Primitive
-    
         | Tuple of items: Type list
         | Record of fields: (Ident * Type) list
-
         | Union of variants: Type list
         | Function of left: Type * right: Type
         | UnsafeFunction of left: Type * right: Type
+        | Reference of inner: Type
     
     type TypeConstraint = 
         | Dependency of name: Ident * ty: Type
@@ -65,7 +67,7 @@ module Pattern =
         | Tuple of patterns: Pattern list
         | Record of fields: (Ident * Pattern) list
         | Literal of value: Literal
-
+        | Type of t: Type
         | Assignment of name: Ident * pattern: Pattern
         | Variant of variant: Type * pattern: Pattern
         

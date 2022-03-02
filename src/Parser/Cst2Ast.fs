@@ -61,7 +61,9 @@ let realLiteral (x: realLiteral) =
 
 let rec quantifiedType t = failwith "quantifiedType unimplemented"
 
-and ty t = failwith "ty unimplemented"
+and ty (t: ty) = 
+    match t with
+    | Type _ -> failwith "Not Implemented"
 
 and enclosedType (x: enclosedType) =
     match x with
@@ -94,9 +96,36 @@ and enclosedType (x: enclosedType) =
         |> fun xs -> x :: xs
         |> List.map recordField
         |> fun xs -> Ast.Type.create (Ast.Type.Record xs) l.start r.stop
-    // TODO Implement
-    | Nominal(name, args) -> failwith "Not Implemented"
-    | Variable(_, name, args) -> failwith "Not Implemented"
+    | Nominal (name, args) ->
+        let ident, identRange = resolvedIdent name
+        match args with
+        | Some (_, (_, _, x, xs, _, r)) ->
+            let args = 
+                x 
+                :: (xs |> List.map (fun (_, x) -> x))
+                |> List.map (fun t -> ty t)
+            Ast.Type.create 
+                (Ast.Type.Application 
+                    (( Ast.Type.create (Ast.Type.Named ident) identRange.start identRange.stop),
+                       args))
+                identRange.start 
+                r.stop
+        | None -> Ast.Type.create (Ast.Type.Named ident) identRange.start identRange.stop
+    | Variable(_, name, args) ->
+        let ident, identStart, identStop = name.inner, name.start, name.stop
+        match args with
+        | Some (_, (_, _, x, xs, _, r)) ->
+            let args = 
+                x 
+                :: (xs |> List.map (fun (_, x) -> x))
+                |> List.map (fun t -> ty t)
+            Ast.Type.create 
+                (Ast.Type.Application 
+                    (( Ast.Type.create (Ast.Type.Variable ident) identStart identStop),
+                       args))
+                identStart 
+                r.stop
+        | None -> Ast.Type.create (Ast.Type.Variable ident) identStart identStop
 
 let rec pattern (x: pattern): Ast.Pattern.Pattern = 
     match x with

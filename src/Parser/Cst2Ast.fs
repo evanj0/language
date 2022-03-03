@@ -59,11 +59,47 @@ let realLiteral (x: realLiteral) =
     System.Double.Parse(string) * (if suffix.IsSome then -1.0 else 1.0), 
     Range.create x.start x.stop
 
-let rec quantifiedType t = failwith "quantifiedType unimplemented"
+let rec quantifiedType t = failwith "Not Implemented"
 
 and ty (t: ty) = 
     match t with
-    | Type _ -> failwith "Not Implemented"
+    | Type (t, ts) -> 
+        let rec funcs t ts =
+            match t, ts with
+            | t, (_, t1)::(ts) -> 
+                match t1 with
+                | SafeFunction (_, _, t2) ->
+                    let astT = typeU t
+                    let astT2 = funcs t2 ts
+                    Ast.Type.create (Ast.Type.Function (astT, astT2)) astT.range.start astT2.range.stop
+                | UnsafeFunction (_, _, t2) ->
+                    let astT = typeU t
+                    let astT2 = funcs t2 ts
+                    Ast.Type.create (Ast.Type.UnsafeFunction (astT, astT2)) astT.range.start astT2.range.stop
+            | t, [] -> typeU t
+        funcs t ts
+        
+
+and typeU t =
+    match t with
+    | Union (x, xs) ->
+        let types =
+            x :: (xs |> List.map (fun (_, x) -> x))
+            |> List.map typeR
+        if types.Length = 1 then
+            types.Head
+        else 
+            Ast.Type.create (Ast.Type.Union types) types.Head.range.start (types |> List.last).range.stop
+        
+
+and typeR t : Ast.Type.Type =
+    match t with
+    | typeR.Reference (t, rOpt) ->
+        match rOpt with
+        | Some (_, kw) -> 
+            let astType = enclosedType t
+            Ast.Type.create (Ast.Type.Reference astType) astType.range.start kw.stop 
+        | None -> enclosedType t
 
 and enclosedType (x: enclosedType) =
     match x with

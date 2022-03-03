@@ -6,9 +6,11 @@
   <ItemGroup>
     <Compile Include="Ir.fs" />
     <Compile Include="UntypedIr.fs" />
+    <Compile Include="Lowering.fs" />
     <Compile Include="Inference.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Shared\Shared.fsproj" />
+    <ProjectReference Include="..\Parser\Parser.fsproj" />
   </ItemGroup>
 </Project>

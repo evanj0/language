@@ -2,6 +2,7 @@
 
 open ListExtensions
 
+/// Ident with modules stored in reverse order.
 type Ident =
     {
         final: string

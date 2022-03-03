@@ -1,7 +1,7 @@
 # language-alpha
 
 ## todo
-- [ ] Finish implementing functions in Cst2Ast.fs
+- [ ] Finish implementing `quatifiedType` in Cst2Ast.fs
 - [ ] Create lowering module to convert AST to IR
   - [ ] Type compiler (resolves typenames based on imported modues)
   - [ ] Representation of module scope (probably want to flatten module structure, but strip module names from functions when importing so that overloading works)

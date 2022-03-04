@@ -18,3 +18,5 @@ module List =
             | Some x -> x :: filterMap mapping xs
             | _ -> filterMap mapping xs
         | [] -> []
+
+    let rec flatMap mapping list = list |> List.map mapping |> List.concat

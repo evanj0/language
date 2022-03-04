@@ -1,14 +1,14 @@
-module Inference.Tests
+﻿module Inference_Tests
 
-open Parsing
-open ResultExtensions
-open Range
+open Inference
 open Ir
-open Identifier
-open NUnit.Framework
+open Parsing
 
-let function1Name = Ident.fromString "function1"
-let function1Type = Type.Function (Type.Primitive Type.Int, Type.Primitive Type.Int)
+open Range
+open Identifier
+open ResultExtensions
+
+open NUnit.Framework
 
 let parseType str = 
     match Parse.``type`` str with
@@ -26,50 +26,41 @@ let parseExpr str =
 
 let tryInfer expr =
     result {
-        let pos = { Position.column = 0; line = 0; index = 0 }
+        let pos = { Position.column = 0; Position.line = 0; Position.index = 0 }
+        let range = Range.create pos pos
         let globals = 
-            [ function1Name, function1Type
-              Ident.fromString "function2", parseType "Integer -> Integer -> Boolean" ]
-        let env = { Env.currentRange = Range.create pos pos; globals = globals; locals = []; }
-        let! resultT = 
-            Inference.infer expr { State.index = 0 } (fun _t _env -> []) env
+            [ Ident.fromString "fnOne", parseType "Integer -> Integer"
+              Ident.fromString "fnTwo", parseType "Integer -> Integer -> Boolean"
+              Ident.fromString "fnThree", parseType "Integer -> Real -> String -> Character -> Boolean"]
+        let env = { Env.currentRange = range; globals = globals; locals = [] }
+        let state = { State.index = 0 }
+        let constrainer = fun _t _env -> []
+        let! _state, t, cs = 
+            Inference.inferUnsolvedType Inference.defaultSolver expr state constrainer env
             |> IResult.toResult
-            |> Result.map (fun (_state, t, _cs) -> t)
-        return resultT
+        let! cs, t = Solving2.solveConstraints cs t
+        let! _ = Solving2.verifyConstraints cs
+        return t
     }
 
 let test expr t =
+    let expr = parseExpr expr
     match tryInfer expr with
-    | Ok resultT -> 
+    | Ok resultT ->
+        let t = parseType t
         printfn "Expected: %s" (Type.print t)
         printfn "Got: %s" (Type.print resultT)
         Assert.True(t |> Type.equals resultT)
     | Error e -> Assert.Fail(sprintf "Message: %s\nNote: %s\nRange: %s\n" e.message e.note e.range.Display)
 
-let testStr expr t = test (parseExpr expr) (parseType t)
+[<Test>]
+let ``function with one argument``() = test "fnOne 1" "Integer"
 
-module Literals =
-    open UntypedIr
-    [<Test>]
-    let ``string literal``() = test (Expr.Literal (Literal.Str "string literal")) (Type.Primitive Type.Str)
+[<Test>]
+let ``function with two arguments``() = test "fnTwo 1 2" "Boolean"
 
-module OverloadsAndFunctions =
-    open UntypedIr
-    [<Test>]
-    let ``non-overloaded function``() = test (Expr.Ident function1Name) function1Type
+[<Test>]
+let ``function with four arguments``() = test "fnThree 1 1.0 \"string\" 'a'" "Boolean"
 
-    [<Test>]
-    let ``non-overloaded function application``() = test (Expr.App (Expr.Ident function1Name, Expr.Literal (Literal.Int 0))) (Type.Primitive Type.Int)
-
-    [<Test>]
-    let ``non-overloaded function 2``() = testStr "function1" "Integer -> Integer"
-
-    [<Test>]
-    let ``non-overloaded function application 2``() = testStr "function1 0" "Integer"
-
-    [<Test>]
-    let ``non-overloaded partial function application``() = testStr "function2 1" "Integer -> Boolean"
-
-    [<Test>]
-    let ``non-overloaded multiple function application``() = testStr "function2 1 2" "Boolean"
-    
+[<Test>]
+let ``partially applied function``() = test "fnTwo 1" "Integer -> Boolean"

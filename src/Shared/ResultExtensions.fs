@@ -27,6 +27,9 @@ module Result =
     /// `Result.collect []` returns `Ok ([])`.
     let collect xs = collect' (Ok []) xs
 
+    /// Same as `xs |> Result.collect |> Result.map List.concat`.
+    let collectConcatenated xs = xs |> collect |> Result.map List.concat
+
     let fromOption errorValue option =
         match option with
         | Some x -> Ok x

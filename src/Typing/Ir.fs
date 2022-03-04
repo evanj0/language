@@ -6,10 +6,17 @@ open ListExtensions
 open ResultExtensions
 open Range
 
-type Uid = { index: int }
+type Uid = 
+    { index: int
+      label: string }
 [<RequireQualifiedAccess>]
 module Uid =
-    let print uid = sprintf "%d" uid.index
+    let create id = { Uid.index = id; label = "" }
+
+    let print uid = sprintf "%s`%d" uid.label uid.index
+
+    /// Ignores the label.
+    let equals a b = a.index = b.index
 
 [<RequireQualifiedAccess>]
 module Literal =
@@ -51,12 +58,15 @@ module Type =
         /// This is meant for overloaded types. Having this info later might be useful.
         | Tagged of uid: Uid * inner: Type
         /// Overloads of a function are put into this to prevent shadowing.
-        | Overloaded of overloads: Type list
+        | Unspecified of overloads: Type list
+        /// Specify which type in the list to use.
+        | Specify of ts: Type list * specifier: Type
+        /// Type constructor that lists dependent variables, bounds, and holds originating environment.
         | Constructor of args: TVariable list * bounds: Bound list * env: (Ident * Type) list * body: Type
         /// Construct the type with the arguments.
         | Construct of args: (TVariable * Type) list * ctor: Type
         /// This is probably needed for having named abstractions that cannot be casted back to the structural type.
-        | Opaque of inner: Type
+        | Opaque of id: Uid * inner: Type
         | Unsafe of inner: Type
         | Reference of inner: Type
         | Primitive of Primitive
@@ -85,9 +95,10 @@ module Type =
         | Primitive Char -> "Char"
         | Primitive Bool -> "Bool"
         | Unknown x -> sprintf "<unknown`%d>" x.id
+        | Opaque (id, t) -> sprintf "[%s: %s]" (Uid.print id) (print t)
         | Function (left, Function (rightl, rightr)) -> sprintf "%s -> (%s -> %s)" (print left) (print rightl) (print rightr)
         | Function (left, right) -> sprintf "%s -> %s" (print left) (print right)
-        | Tagged (uid, inner) -> sprintf "%s`%s" (print inner) (Uid.print uid)
+        | Tagged (uid, inner) -> sprintf "%s#%s" (print inner) (Uid.print uid)
         | Reference inner -> sprintf "%s&" (print inner)
         | Unsafe inner -> sprintf "%s!" (print inner)
 
@@ -135,6 +146,14 @@ module Type =
         let insufficientTypeArgs arg ctor =
             sprintf "Couldn't construct type `%s` because one or more type arguments are missing, namely `%s`." (print ctor) (TVariable.print arg)
             |> create
+
+        // Separation errors:
+        let tupleElementCountMismatch outer inner =
+            sprintf "Couldn't match tuple `%s` with tuple`%s` because the numbers of elements are not equal." (print outer) (print inner) |> create
+
+        let opaqueTypeMismatch outer inner =
+            sprintf "Couldn't match opaque type `%s` with opaque type `%s` because the IDs are not equal." (print outer) (print inner) |> create
+        // --
 
         let ``value not found`` ident =
             sprintf "The value `%s` is not defined in the local or module scope." (Ident.print ident)
@@ -234,9 +253,9 @@ module Type =
         | Union variants ->
             let state, ts = substElements id (fun _ -> id) state variants
             state, Union ts
-        | Overloaded overloads ->
+        | Unspecified overloads ->
             substElements id (fun _ t -> t) state overloads
-            |> fun (state, xs) -> state, Overloaded xs
+            |> fun (state, xs) -> state, Unspecified xs
         | Constructor (args, bounds, env, body) ->
             // map through body and add to a new list an argument if the mapping hits a variable that is in
             // the old args
@@ -267,14 +286,14 @@ module Type =
                 Ok res
             else
                 Error(Error.``couldn't match variable`` a b)
-        | Opaque this, Opaque other -> this |> tryMatch other
+        | Opaque (_, this), Opaque (_, other) -> this |> tryMatch other // TODO (type-subst) compare ids
         | Primitive Str, Primitive Str -> Ok res
         | Primitive Int, Primitive Int -> Ok res
         | Primitive Real, Primitive Real -> Ok res
         | Primitive Char, Primitive Char -> Ok res
         | Primitive Bool, Primitive Bool -> Ok res
         // TODO Test for these cases to determine if they are actually unreachable
-        | Overloaded _, Overloaded _ -> failStr "tryMatch Overloaded Overloaded is unreachable"
+        | Unspecified _, Unspecified _ -> failStr "tryMatch Overloaded Overloaded is unreachable"
         | Constructor _, Constructor _ -> failStr "tryMatch Constructor Constructor is unreachable"
         | Function (thisL, thisR), Function (otherL, otherR) ->
             result {

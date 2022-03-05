@@ -39,30 +39,21 @@ module Env =
     let extend name t this =
         { this with Env.locals = (Ident.fromList [ name ], t) :: this.locals }
 
-    let getOverloads ident this =
-        let local =
-            this.locals
-            |> List.filter (fun (x, _) -> x |> Ident.contains ident)
-            |> List.map (fun (_, x) -> x)
-            |> List.tryHead
-            |> Result.fromOption (Type.Error.``overloaded value not found`` ident (this |> currentRange)) // TODO fix this error handling
+    /// Retrieves types of values that match `pred` from the local scope. 
+    /// If a local value is found, this shadows any values in the global scope. 
+    /// If none are found in the local scope, the types of values that match `pred` are returned.
+    let getTypesOfValues pred env =
+        let pred = fun (ident, t_) -> pred ident
+        let locals = env.locals |> List.filter pred
 
-        if local |> Result.isOk then
-            local
+        if locals.Length >= 1 then
+            [ locals |> List.head ]
         else
-            this.globals
-            |> List.filter (fun (i, _t) -> i |> Ident.contains ident)
-            |> List.map (fun (_i, t) -> t)
+            env.globals |> List.filter pred
+        |> List.map (fun (_ident, t) -> t)
 
-            |> fun list ->
-                if list.Length = 1 then
-                    list |> List.head |> Ok
-                else if list.Length = 0 then
-                    Error(Type.Error.``overloaded value not found`` ident (this |> currentRange))
-                else
-                    Ok(Type.Unspecified list)
+    let types env = []
 
-    let types (env: Env) : (Ident * Type) list = failwith "Not Implemented"
 
 type State = { index: int }
 
@@ -116,10 +107,6 @@ module IResult =
 
 [<RequireQualifiedAccess>]
 module private I =
-    let getType ident state env =
-        env
-        |> Env.getOverloads ident
-        |> IResult.fromResultT state []
 
     let noConstraints _ _ = []
 
@@ -145,7 +132,7 @@ module Solving2 =
     /// Constructs the type constructor `ctor` with `args` by substituting the variable for the type of each argument in the body.
     let constructType args ctor : Result<Type, Range -> Type.Error> =
         match ctor with
-        | Type.Constructor (eArgs, bounds, env, body) -> 
+        | Type.Constructor (eArgs, bounds, env, body) ->
             eArgs
             |> List.map (fun eName ->
                 args
@@ -156,7 +143,7 @@ module Solving2 =
             |> Result.map (fun args ->
                 args
                 |> List.fold (fun acc (var, t) -> acc |> Type.subst var t) body)
-        | _ -> Error (Type.Error.notATypeConstructor ctor)
+        | _ -> Error(Type.Error.notATypeConstructor ctor)
 
     let findSubstitutions (cs: Constraints) : (Type.TUnknown * Type) list =
         cs
@@ -165,6 +152,11 @@ module Solving2 =
                    inner = inner
                    range = _ } ->
                 match outer, inner with
+                | Type.Unknown x1, (Type.Unknown x2 as var) -> 
+                    if Type.TUnknown.equals x1 x2 then
+                        []
+                    else
+                        [ x1, var ]
                 | Type.Unknown x, t -> [ x, t ]
                 | t, Type.Unknown x -> [ x, t ]
                 | _ -> [])
@@ -182,15 +174,20 @@ module Solving2 =
             (cs, t)
 
     let rec separateConstraint (c: Constraint) : Result<Constraints, Type.Error> =
+        
         let rangeErr e x = e x c.range
 
         let fail e = Error(e c.outer c.inner c.range)
 
+        let fail1 e args = Error (e args c.range)
+
         let newConstraint outer inner = c |> Constraint.copyRange outer inner
 
-        let separateNewConstraint outer inner = newConstraint outer inner |> separateConstraint
+        let separateNewConstraint outer inner =
+            newConstraint outer inner |> separateConstraint
 
-        let addRange result = result |> Result.mapError (fun e -> e c.range)
+        let addRange result =
+            result |> Result.mapError (fun e -> e c.range)
 
         // a -> b :> c -> d
         // a :> d
@@ -285,17 +282,25 @@ module Solving2 =
                         | _ -> [])
                     t
                 |> addRange
-            
+
             result {
                 let! args = getArgs body inner
-                return! separateNewConstraint (Type.Construct(args, ctor)) (inner)
+                return! separateNewConstraint (Type.Construct(args, ctor)) inner
             }
 
-        // TODO Implement overload separation and rest of cases
+        | Type.Unspecified (tOuters, name), inner ->
+            if inner |> Type.contains (function Type.Unknown _ -> true | _ -> false) then
+                Ok [ c ]
+            else 
+                tOuters
+                |> List.tryFind (fun t -> t |> Type.equals inner)
+                |> Result.fromOption (Type.Error.overloadNotFound (name, inner) c.range)
+                |> Result.bind (fun t -> separateNewConstraint t inner)
+
         // TODO Decide on specific error messages to add here
 
         // <unknown> :> a
-        // -- 
+        // --
         // a :> <unknown>
         | _ -> Ok [ c ]
 
@@ -310,9 +315,9 @@ module Solving2 =
             let! cs = separateConstraints cs
             let subs = findSubstitutions cs
 
-            if subs.Length = 0 then
-                return cs, t
-            else
+            match subs.Length with
+            | 0 -> return cs, t
+            | _ ->
                 let cs, t = subs |> substituteInto cs t
                 return! solveConstraints cs t
         }
@@ -326,26 +331,38 @@ module Solving2 =
                 Error(Type.Error.expectedTypeMismatch c.inner c.outer c.range)) // actual, expected
         |> Result.collect
 
+    let checkForUnknowns cs t = failwith "Not Implemented" // TODO this should check for any remaining unknowns.
 
 [<RequireQualifiedAccess>]
 module Inference =
 
     /// Gets the unsolved type of an expressions, along with the constraints needed to solve the type.
-    let rec inferUnsolvedType
+    let rec inferUnsolvedType // TODO consider adapting this for creating typed ir
         (solver: (Type -> Constraints) -> Type IResult -> Type IResult)
         (expr: Expr)
         (state: State)
         (constrainer: Type -> Env -> Constraints)
         (env: Env)
         : Type IResult =
+        
         let constrainer t = constrainer t env
+        
         let infer = inferUnsolvedType solver
 
+        let fail e args = IErr(e args env.currentRange)
+
         match expr with
+        
+        // ident
         | Expr.Ident ident ->
             env
-            // TODO also decide if env will be set in constructors here or somewhere else
-            |> I.getType ident state
+            |> Env.getTypesOfValues (fun id -> id |> Ident.contains ident)
+            |> IResult.ret state
+            |> IResult.bind (fun state list ->
+                match list.Length with
+                | 0 -> fail Type.Error.nameNotFound ident
+                | 1 -> IResult.ret state list.Head
+                | _ -> IResult.ret state (Type.Unspecified (list, Ident.print ident)))
 
         // str
         | Expr.Literal (Literal.Str _) -> IResult.ret state (Type.Primitive Type.Str)

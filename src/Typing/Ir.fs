@@ -58,7 +58,8 @@ module Type =
         /// This is meant for overloaded types. Having this info later might be useful.
         | Tagged of uid: Uid * inner: Type
         /// Overloads of a function are put into this to prevent shadowing.
-        | Unspecified of overloads: Type list
+        /// `name` is only for error reporting.
+        | Unspecified of overloads: Type list * name: string
         /// Specify which type in the list to use.
         | Specify of ts: Type list * specifier: Type
         /// Type constructor that lists dependent variables, bounds, and holds originating environment.
@@ -96,7 +97,7 @@ module Type =
         | Primitive Bool -> "Bool"
         | Unknown x -> sprintf "<unknown`%d>" x.id
         | Opaque (id, t) -> sprintf "[%s: %s]" (Uid.print id) (print t)
-        | Function (left, Function (rightl, rightr)) -> sprintf "%s -> (%s -> %s)" (print left) (print rightl) (print rightr)
+        | Function (Function (leftl, leftr), right) -> sprintf "(%s -> %s) -> %s" (print leftl) (print leftr) (print right)
         | Function (left, right) -> sprintf "%s -> %s" (print left) (print right)
         | Tagged (uid, inner) -> sprintf "%s#%s" (print inner) (Uid.print uid)
         | Reference inner -> sprintf "%s&" (print inner)
@@ -154,6 +155,15 @@ module Type =
         let opaqueTypeMismatch outer inner =
             sprintf "Couldn't match opaque type `%s` with opaque type `%s` because the IDs are not equal." (print outer) (print inner) |> create
         // --
+
+        // Inference errors:
+        let nameNotFound name =
+            sprintf "Couldn't find a value named `%s` in the local or module scope." (Ident.print name) |> create
+
+        let overloadNotFound (name, t) =
+            sprintf "Couldn't find an overload of `%s` that matches type `%s`." name (print t) |> create
+
+        // TODO remove below
 
         let ``value not found`` ident =
             sprintf "The value `%s` is not defined in the local or module scope." (Ident.print ident)
@@ -253,18 +263,13 @@ module Type =
         | Union variants ->
             let state, ts = substElements id (fun _ -> id) state variants
             state, Union ts
-        | Unspecified overloads ->
-            substElements id (fun _ t -> t) state overloads
-            |> fun (state, xs) -> state, Unspecified xs
-        | Constructor (args, bounds, env, body) ->
-            // map through body and add to a new list an argument if the mapping hits a variable that is in
-            // the old args
-            // env should not be touched
-            // bounds need to be updated
+        | Unspecified (ts, n) ->
+            substElements id (fun _ t -> t) state ts
+            |> fun (state, ts) -> state, Unspecified (ts ,n)
+        | Constructor (_args, _bounds, _env, _body) ->
             failwith "Not Implemented"
         // TODO check for other cases where the type can contain other types
         | t -> mapping state t
-
 
     /// Directionally compares types; `other` can be more general than `this`.
     /// Runs `f` on `(this, other)` and returns all results.
@@ -384,7 +389,7 @@ module Type =
         |> mapContained
             (fun state t1 ->
                 match t1 with
-                | Type.Unknown var -> 
+                | Unknown var -> 
                     if state |> List.contains var then
                         state, t1
                     else var :: state, t1
@@ -397,10 +402,20 @@ module Type =
                 |> List.map (fun (index, x) -> x, TVariable.create index)
             let newT =
                 substitutions
-                |> List.map (fun (x, var) -> x, Type.Variable var)
+                |> List.map (fun (x, var) -> x, Variable var)
                 |> List.fold (fun acc (x, t) -> acc |> substUnknown x t) t
             let args = substitutions |> List.map (fun (_x, var) -> var)
-            Type.Constructor(args, [], env, newT)
+            Constructor(args, [], env, newT)
+
+    let contains pred t =
+        t 
+        |> mapContained 
+            (fun state t ->
+                match state, t with
+                | true, t -> true, t
+                | _, t -> pred t, t)
+            false
+        |> fun (x, _t) -> x
 
 type Type = Type.Type
 

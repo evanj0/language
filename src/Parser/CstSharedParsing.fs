@@ -29,8 +29,8 @@ let ensureNotReserved separator parser =
 let pos parser = 
     getPosition .>>.? parser .>>. getPosition 
     |>> fun ((p1, x), p2) -> Pos (x, 
-        { index = p1.Index; line = p1.Line; column = p1.Column }, 
-        { index = p2.Index; line = p2.Line; column = p2.Column })
+        { index = p1.Index; line = p1.Line; column = p1.Column; file = "" }, 
+        { index = p2.Index; line = p2.Line; column = p2.Column; file = "" })
 
 let pcharpos c: Parser<ckw, _> = pos (pchar c)
 

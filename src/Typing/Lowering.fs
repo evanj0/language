@@ -18,6 +18,10 @@ module Lower =
         | Ast.Type.Function (left, right) -> Ir.Type.Function (lType left, lType right)
         | Ast.Type.UnsafeFunction (left, right) -> Ir.Type.Function (lType left, Ir.Type.Unsafe (lType right))
         | Ast.Type.Reference inner -> Ir.Type.Reference (lType inner)
+        | Ast.Type.Tuple ts -> 
+            ts
+            |> List.map lType
+            |> Ir.Type.Tuple
 
 
     let rec lExpr (e: Ast.Expression.Expression) =

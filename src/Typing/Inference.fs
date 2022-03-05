@@ -497,6 +497,8 @@ module Inference =
         |> IResult.map (fun state t -> state, t, constrainer t |> List.map (fun c -> c |> Constraint.setMessage "TODO Add trace messages")) // TODO Add trace messages
         |> IResult.mapError (fun e -> e |> Type.Error.withTraceMessage "TODO Add trace messages") // TODO Add trace messages
 
+        // TODO Other functions that produce errors need to insert the message
+
     let defaultSolver constrainer iResult =
         result {
             let! state, t, cs = iResult |> IResult.toResult

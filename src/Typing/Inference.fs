@@ -9,19 +9,22 @@ open ListExtensions
 open Range
 
 
+type Constraint =
+    { outer: Type
+      inner: Type
+      range: Range
+      message: string }
+
 [<RequireQualifiedAccess>]
 module Constraint =
-    type Constraint =
-        { outer: Type
-          inner: Type
-          range: Range }
 
     let copyRange outer inner this =
         { this with
             outer = outer
             inner = inner }
 
-type Constraint = Constraint.Constraint
+    let setMessage message c =
+        { c with Constraint.message = message }
 
 type Constraints = Constraint list
 
@@ -105,6 +108,11 @@ module IResult =
 
     let ret state t = IOk(state, t, [])
 
+    let mapError mapping result =
+        match result with
+        | IOk (state, t, c) -> IOk(state, t, c)
+        | IErr e -> IErr (mapping e)
+
 [<RequireQualifiedAccess>]
 module private I =
 
@@ -122,13 +130,14 @@ module private I =
         let refineTo outer inner env : Constraints =
             [ { Constraint.outer = outer
                 inner = inner
-                range = env |> Env.currentRange } ]
+                range = env |> Env.currentRange
+                message = "" } ]
 
         /// Same as `refineTo`, but with arguments reversed.
         let refineFrom inner outer this = refineTo outer inner this
 
 [<RequireQualifiedAccess>]
-module Solving2 =
+module Solving =
     /// Constructs the type constructor `ctor` with `args` by substituting the variable for the type of each argument in the body.
     let constructType args ctor : Result<Type, Range -> Type.Error> =
         match ctor with
@@ -153,6 +162,7 @@ module Solving2 =
                    range = _ } ->
                 match outer, inner with
                 | Type.Unknown x1, (Type.Unknown x2 as var) -> 
+                    // Check for production of a self substitution that would cause infinite recursion.
                     if Type.TUnknown.equals x1 x2 then
                         []
                     else
@@ -484,13 +494,14 @@ module Inference =
         | Expr.Mut (expr, value) -> failwith "Not Implemented"
         | Expr.Match (expr, case) -> failwith "Not Implemented"
 
-        |> IResult.map (fun state t -> state, t, constrainer t)
+        |> IResult.map (fun state t -> state, t, constrainer t |> List.map (fun c -> c |> Constraint.setMessage "TODO Add trace messages")) // TODO Add trace messages
+        |> IResult.mapError (fun e -> e |> Type.Error.withTraceMessage "TODO Add trace messages") // TODO Add trace messages
 
     let defaultSolver constrainer iResult =
         result {
             let! state, t, cs = iResult |> IResult.toResult
-            let! cs, t = Solving2.solveConstraints cs t
-            let! _ = Solving2.verifyConstraints cs
+            let! cs, t = Solving.solveConstraints cs t
+            let! _ = Solving.verifyConstraints cs
             return state, t, cs
         }
         |> IResult.fromResult

@@ -106,19 +106,27 @@ module Type =
     type Error =
         { message: string
           note: string
-          range: Range }
+          range: Range
+          /// Messages originating from the outside scope appear first.
+          trace: string list }
 
     [<RequireQualifiedAccess>]
     module Error =
         let create message range =
             { Error.message = message
               note = ""
-              range = range }
+              range = range
+              trace = [] }
 
         let createWithNote (message, note) range =
             { Error.message = message
               note = note
-              range = range }
+              range = range
+              trace = []  }
+
+        /// Prepends a trace message. Messages originating from the outside scope appear first.
+        let withTraceMessage message e =
+            { e with Error.trace = message :: e.trace }
 
         // TODO improve the language and consistency of the error messages.
         // TODO rename all of these

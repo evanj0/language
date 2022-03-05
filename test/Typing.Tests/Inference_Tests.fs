@@ -31,19 +31,24 @@ let tryInfer expr =
         let globals = 
             [ Ident.fromString "fnOne", parseType "Integer -> Integer"
               Ident.fromString "fnTwo", parseType "Integer -> Integer -> Boolean"
-              Ident.fromString "fnThree", parseType "Integer -> Real -> String -> Character -> Boolean"]
+              Ident.fromString "fnThree", parseType "Integer -> Real -> String -> Character -> Boolean"
+              Ident.fromString "longFn", parseType "Integer -> Integer -> String -> String -> Real -> Real -> Character -> Character -> Boolean -> Boolean" ]
         let env = { Env.currentRange = range; globals = globals; locals = [] }
         let state = { State.index = 0 }
         let constrainer = fun _t _env -> []
         let! _state, t, cs = 
             Inference.inferUnsolvedType Inference.defaultSolver expr state constrainer env
             |> IResult.toResult
-        let! cs, t = Solving2.solveConstraints cs t
-        let! _ = Solving2.verifyConstraints cs
+        let! cs, t = Solving.solveConstraints cs t
+        let! _ = Solving.verifyConstraints cs
         return t
     }
 
+let printError (e: Type.Error) =
+    sprintf "Expected failure.\nMessage: %s\nNote: %s\nRange: %s\nTrace: %s\n" e.message e.note e.range.Display (e.trace |> List.fold (fun str s -> sprintf "%s\n%s" str s) "")
+
 let expect f expr t : unit =
+    printfn "Expression: %s" expr
     let expr = parseExpr expr
     let t = parseType t
     f t (tryInfer expr)
@@ -54,14 +59,13 @@ let pass t (result: Result<_, Type.Error>) =
         printfn "Expected: %s" (Type.print t)
         printfn "Got: %s" (Type.print resultT)
         Assert.True(t |> Type.equals resultT)
-    | Error e -> Assert.Fail(sprintf "Message: %s\nNote: %s\nRange: %s\n" e.message e.note e.range.Display)
+    | Error e -> Assert.Fail(printError e)
 
 let fail _ (result: Result<_, Type.Error>) =
     match result with
     | Ok resultT ->
         Assert.Fail(sprintf "Expected failure, got: %s" (Type.print resultT))
-    | Error e -> 
-        Assert.Pass(sprintf "Expected failure.\nMessage: %s\nNote: %s\nRange: %s\n" e.message e.note e.range.Display)
+    | Error e -> Assert.Pass(printError e)
 
 module Functions =
     
@@ -84,8 +88,15 @@ module Failure =
     [<Test>]
     let ``multiple function parameters of incorrect types``() = expect fail "fnThree 1 1.1 'a'" "()"
 
+    
+    [<Test>]
+    let ``many function parameters of incorrect types``() = expect fail "longFn 1 1.5 1 'a' true 2" "()"
+
     [<Test>]
     let ``application of value to value``() = expect fail "\"not a function\" 1" "()"
 
     [<Test>]
     let ``application of a value to multiple values``() = expect fail "\"not a function\" 1 1.5" "()"
+
+    [<Test>]
+    let ``application of a value to many values``() = expect fail "\"not a function\" 1 1.5 1 'a' true 2" "()"

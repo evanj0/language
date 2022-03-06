@@ -60,8 +60,6 @@ module Type =
         /// Overloads of a function are put into this to prevent shadowing.
         /// `name` is only for error reporting.
         | Unspecified of overloads: Type list * name: string
-        /// Specify which type in the list to use.
-        | Specify of ts: Type list * specifier: Type
         /// Type constructor that lists dependent variables, bounds, and holds originating environment.
         | Constructor of args: TVariable list * bounds: Bound list * env: (Ident * Type) list * body: Type
         /// Construct the type with the arguments.
@@ -102,6 +100,12 @@ module Type =
         | Tagged (uid, inner) -> sprintf "%s#%s" (print inner) (Uid.print uid)
         | Reference inner -> sprintf "%s&" (print inner)
         | Unsafe inner -> sprintf "%s!" (print inner)
+        | Tuple xs -> 
+            let inner = xs |> List.map print |> List.intercalate ", "
+            sprintf "(%s)" inner
+        | Unspecified (ts, name) ->
+            let ts = ts |> List.map print |> List.intercalate "; "
+            sprintf "[%s: %s]" name ts
 
     type Error =
         { message: string
@@ -125,7 +129,7 @@ module Type =
               trace = []  }
 
         /// Prepends a trace message. Messages originating from the outside scope appear first.
-        let withTraceMessage message e =
+        let addTraceMessage message e =
             { e with Error.trace = message :: e.trace }
 
         // TODO improve the language and consistency of the error messages.
@@ -158,7 +162,7 @@ module Type =
 
         // Separation errors:
         let tupleElementCountMismatch outer inner =
-            sprintf "Couldn't match tuple `%s` with tuple`%s` because the numbers of elements are not equal." (print outer) (print inner) |> create
+            sprintf "Couldn't match tuple `%s` with tuple `%s` because the numbers of elements are not equal." (print outer) (print inner) |> create
 
         let opaqueTypeMismatch outer inner =
             sprintf "Couldn't match opaque type `%s` with opaque type `%s` because the IDs are not equal." (print outer) (print inner) |> create
@@ -279,6 +283,8 @@ module Type =
         // TODO check for other cases where the type can contain other types
         | t -> mapping state t
 
+
+    // TODO Update which types get traversed
     /// Directionally compares types; `other` can be more general than `this`.
     /// Runs `f` on `(this, other)` and returns all results.
     /// ```
@@ -359,10 +365,29 @@ module Type =
             |> Result.collect
         | _ -> Error(Error.typeMismatch this other)
 
-    let equals other t = // TODO fix
-        t 
-        |> tryMatch (fun _ -> []) other
-        |> Result.isOk
+    let rec isMoreGeneralThan (inner: Type) (outer: Type) : bool =
+        match outer, inner with
+        | Primitive Int, Primitive Int -> true
+        | Primitive Str, Primitive Str -> true
+        | Primitive Real, Primitive Real -> true
+        | Primitive Char, Primitive Char -> true
+        | Primitive Bool, Primitive Bool -> true
+        | Unknown(id1), Unknown(id2) -> TUnknown.equals id1 id2
+        | Variable(id1),Variable(id2) -> TVariable.equals id1 id2
+        | Named(name1, _),Named(name2, _) -> Ident.equals name1 name2
+        | Tagged(_, inner1), Tagged(_, inner2) -> isMoreGeneralThan inner1 inner2 // uid can be different
+        | Unspecified(overloads1, _), Unspecified(overloads2, _) -> List.unorderedCmp isMoreGeneralThan overloads1 overloads2
+        | Constructor(_, _, _, _), Constructor(_, _, _, _) -> failwith "unreachable"
+        | Construct(_, _), Construct(_, _) -> failwith "unreachable"
+        | Opaque(id1, inner1), Opaque(id2, inner2) -> Uid.equals id1 id2 
+        | Unsafe(inner1), Unsafe(inner2) -> isMoreGeneralThan inner1 inner2
+        | Reference(inner1), Reference(inner2) -> isMoreGeneralThan inner1 inner2
+        | Function(left1, right1), Function(left2, right2) -> isMoreGeneralThan left1 left2 && isMoreGeneralThan right1 right2
+        | Tuple(elements1), Tuple(elements2) -> elements1.Length = elements2.Length && List.zip elements1 elements2 |> List.map (fun (a, b) -> isMoreGeneralThan a b) |> List.forall id
+        | Record(elements1), Record(elements2) -> failwith "Not Implemented"
+        | Union(elements1), Union(elements2) -> failwith "Not Implemented"
+        | _ -> false
+
 
     let subst var newType t =
         t 

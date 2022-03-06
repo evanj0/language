@@ -23,6 +23,8 @@ module Lower =
             |> List.map lType
             |> Ir.Type.Tuple
 
+    let lQuantifiedType (Ast.Type.QuantifiedType(t, _vars, _bounds)) =
+        lType t
 
     let rec lExpr (e: Ast.Expression.Expression) =
         match e.expr with
@@ -33,3 +35,5 @@ module Lower =
         | Ast.Expression.Literal (Ast.Literal.Character x) -> UntypedIr.Expr.Literal (Ir.Literal.Char x)
         | Ast.Expression.Literal (Ast.Literal.Boolean x) -> UntypedIr.Expr.Literal (Ir.Literal.Bool x)
         | Ast.Expression.Application (f, x) -> UntypedIr.Expr.App (lExpr f, lExpr x)
+        | Ast.Expression.TupleConstructor xs -> xs |> List.map lExpr |> UntypedIr.Expr.Tuple
+        | Ast.Expression.ExplicitType (expr, t) -> UntypedIr.Expr.Type(lExpr expr, lQuantifiedType t)

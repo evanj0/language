@@ -20,3 +20,17 @@ module List =
         | [] -> []
 
     let rec flatMap mapping list = list |> List.map mapping |> List.concat
+
+    let intercalate (sep: string) (list: string list) = System.String.Join(sep, list)
+
+    /// Runs `comparer` on an element from `list1` and an element from `list2`.
+    let unorderedCmp (comparer: 'a -> 'b -> bool) (list1: 'a list) (list2: 'b list) : bool =
+        if list1.Length = list2.Length then
+            list1
+            |> List.map (fun a ->
+                list2
+                |> List.tryFind (fun b -> comparer a b)
+                |> Option.isSome)
+            |> List.forall id
+        else 
+            false

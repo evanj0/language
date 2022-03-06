@@ -23,8 +23,7 @@ module Constraint =
             outer = outer
             inner = inner }
 
-    let setMessage message c =
-        { c with Constraint.message = message }
+    let setMessage message c = { c with Constraint.message = message }
 
 type Constraints = Constraint list
 
@@ -42,8 +41,8 @@ module Env =
     let extend name t this =
         { this with Env.locals = (Ident.fromList [ name ], t) :: this.locals }
 
-    /// Retrieves types of values that match `pred` from the local scope. 
-    /// If a local value is found, this shadows any values in the global scope. 
+    /// Retrieves types of values that match `pred` from the local scope.
+    /// If a local value is found, this shadows any values in the global scope.
     /// If none are found in the local scope, the types of values that match `pred` are returned.
     let getTypesOfValues pred env =
         let pred = fun (ident, t_) -> pred ident
@@ -111,7 +110,7 @@ module IResult =
     let mapError mapping result =
         match result with
         | IOk (state, t, c) -> IOk(state, t, c)
-        | IErr e -> IErr (mapping e)
+        | IErr e -> IErr(mapping e)
 
 [<RequireQualifiedAccess>]
 module private I =
@@ -161,7 +160,7 @@ module Solving =
                    inner = inner
                    range = _ } ->
                 match outer, inner with
-                | Type.Unknown x1, (Type.Unknown x2 as var) -> 
+                | Type.Unknown x1, (Type.Unknown x2 as var) ->
                     // Check for production of a self substitution that would cause infinite recursion.
                     if Type.TUnknown.equals x1 x2 then
                         []
@@ -180,16 +179,24 @@ module Solving =
                     { c with
                         Constraint.outer = c.outer |> Type.substUnknown x t
                         Constraint.inner = c.inner |> Type.substUnknown x t }),
-                t0 |> Type.substUnknown x t)
+                if (match t with
+                    | Type.Unspecified _ -> false // don't want to do substitutions if t is unspecified
+                    | _ -> true) then
+                    t0 |> Type.substUnknown x t
+                else
+                    t0)
             (cs, t)
 
+
+    /// Separates a single constraint into multiple by separating types when possible.
+    /// Produces errors.
     let rec separateConstraint (c: Constraint) : Result<Constraints, Type.Error> =
-        
-        let rangeErr e x = e x c.range
 
-        let fail e = Error(e c.outer c.inner c.range)
+        // This should always be used in this since it adds the trace message.
+        let error e =
+            e c.range |> Type.Error.addTraceMessage c.message
 
-        let fail1 e args = Error (e args c.range)
+        let fail e = Error(error (e c.outer c.inner))
 
         let newConstraint outer inner = c |> Constraint.copyRange outer inner
 
@@ -230,7 +237,7 @@ module Solving =
             env
             |> List.tryFind (fun (n, _) -> name |> Ident.equals n)
             |> Option.map (fun (_, t) -> t)
-            |> Result.fromOption (rangeErr Type.Error.namedTypeNotFound name)
+            |> Result.fromOption (Type.Error.namedTypeNotFound name |> error)
             |> Result.bind (fun outer -> separateNewConstraint outer inner)
 
         // a :> T
@@ -239,7 +246,7 @@ module Solving =
             env
             |> List.tryFind (fun (n, _) -> name |> Ident.equals n)
             |> Option.map (fun (_, t) -> t)
-            |> Result.fromOption (rangeErr Type.Error.namedTypeNotFound name)
+            |> Result.fromOption (Type.Error.namedTypeNotFound name |> error)
             |> Result.bind (fun inner -> separateNewConstraint outer inner)
 
         // T<a> :> b
@@ -298,14 +305,31 @@ module Solving =
                 return! separateNewConstraint (Type.Construct(args, ctor)) inner
             }
 
+        | Type.Unspecified _, Type.Unspecified _ -> Ok [ c ]
+
         | Type.Unspecified (tOuters, name), inner ->
-            if inner |> Type.contains (function Type.Unknown _ -> true | _ -> false) then
+            if inner
+               |> Type.contains (function
+                   | Type.Unknown _ -> true
+                   | _ -> false) then
                 Ok [ c ]
-            else 
+            else
                 tOuters
-                |> List.tryFind (fun t -> t |> Type.equals inner)
+                |> List.tryFind (fun t -> t |> Type.isMoreGeneralThan inner)
                 |> Result.fromOption (Type.Error.overloadNotFound (name, inner) c.range)
                 |> Result.bind (fun t -> separateNewConstraint t inner)
+
+        | outer, Type.Unspecified (tInners, name) ->
+            if outer
+               |> Type.contains (function
+                   | Type.Unknown _ -> true
+                   | _ -> false) then
+                Ok [ c ]
+            else
+                tInners
+                |> List.tryFind (fun t -> outer |> Type.isMoreGeneralThan t)
+                |> Result.fromOption (Type.Error.overloadNotFound (name, outer) c.range)
+                |> Result.bind (fun t -> separateNewConstraint outer t)
 
         // TODO Decide on specific error messages to add here
 
@@ -314,13 +338,15 @@ module Solving =
         // a :> <unknown>
         | _ -> Ok [ c ]
 
-    let separateConstraints cs =
+    let separateConstraints cs : Result<Constraint list, Type.Error> =
         cs
         |> List.map separateConstraint
         |> Result.collect
         |> Result.map List.concat
 
     let rec solveConstraints (cs: Constraints) (t: Type) : Result<Constraints * Type, Type.Error> =
+        
+        let _ = 1
         result {
             let! cs = separateConstraints cs
             let subs = findSubstitutions cs
@@ -332,37 +358,46 @@ module Solving =
                 return! solveConstraints cs t
         }
 
-    let verifyConstraints (cs: Constraints) =
+    /// Verifies constraints that do not contribute to the final type.
+    /// Produces errors.
+    let verifyConstraints (cs: Constraints) : Result<Constraint list, Type.Error> =
         cs
         |> List.map (fun c ->
-            if c.outer |> Type.equals c.inner then
+            if c.outer |> Type.isMoreGeneralThan c.inner then
                 Ok c
             else
-                Error(Type.Error.expectedTypeMismatch c.inner c.outer c.range)) // actual, expected
+                Error(
+                    Type.Error.expectedTypeMismatch c.inner c.outer c.range
+                    |> Type.Error.addTraceMessage c.message
+                )) // actual, expected
         |> Result.collect
 
+
+    /// Checks for remaining unknowns types in `cs` and `t`.
+    /// Produces errors.
     let checkForUnknowns cs t = failwith "Not Implemented" // TODO this should check for any remaining unknowns.
 
 [<RequireQualifiedAccess>]
 module Inference =
 
-    /// Gets the unsolved type of an expressions, along with the constraints needed to solve the type.
-    let rec inferUnsolvedType // TODO consider adapting this for creating typed ir
+    /// Produces a potentially unsolved type and constraints used to solve the type.
+    /// Produces errors.
+    let rec infer
         (solver: (Type -> Constraints) -> Type IResult -> Type IResult)
         (expr: Expr)
         (state: State)
         (constrainer: Type -> Env -> Constraints)
         (env: Env)
         : Type IResult =
-        
+
         let constrainer t = constrainer t env
-        
-        let infer = inferUnsolvedType solver
+
+        let infer = infer solver
 
         let fail e args = IErr(e args env.currentRange)
 
         match expr with
-        
+
         // ident
         | Expr.Ident ident ->
             env
@@ -372,7 +407,12 @@ module Inference =
                 match list.Length with
                 | 0 -> fail Type.Error.nameNotFound ident
                 | 1 -> IResult.ret state list.Head
-                | _ -> IResult.ret state (Type.Unspecified (list, Ident.print ident)))
+                | _ ->
+                    IResult.ret state (Type.Unspecified(list, Ident.print ident))
+                    |> IResult.bind (fun state unspecifiedT ->
+                        state
+                        |> I.createUnknown
+                        |> IResult.map (fun state unknownT -> state, unknownT, I.Constrain.refineTo unspecifiedT unknownT env)))
 
         // str
         | Expr.Literal (Literal.Str _) -> IResult.ret state (Type.Primitive Type.Str)
@@ -494,10 +534,18 @@ module Inference =
         | Expr.Mut (expr, value) -> failwith "Not Implemented"
         | Expr.Match (expr, case) -> failwith "Not Implemented"
 
-        |> IResult.map (fun state t -> state, t, constrainer t |> List.map (fun c -> c |> Constraint.setMessage "TODO Add trace messages")) // TODO Add trace messages
-        |> IResult.mapError (fun e -> e |> Type.Error.withTraceMessage "TODO Add trace messages") // TODO Add trace messages
+        |> IResult.map (fun state t ->
+            state,
+            t,
+            constrainer t
+            |> List.map (fun c ->
+                c
+                |> Constraint.setMessage "TODO Add trace messages")) // TODO Add trace messages
+        |> IResult.mapError (fun e ->
+            e
+            |> Type.Error.addTraceMessage "TODO Add trace messages") // TODO Add trace messages
 
-        // TODO Other functions that produce errors need to insert the message
+    // TODO Other functions that produce errors need to insert the message
 
     let defaultSolver constrainer iResult =
         result {

@@ -33,7 +33,9 @@ let globals =
       // overloadedFunction1
       Ident.fromString "overloadedFunction1", parseType "String -> Integer   -> (String, Integer)"
       Ident.fromString "overloadedFunction1", parseType "String -> Real      -> (String, Real)"
-      Ident.fromString "overloadedFunction1", parseType "String -> Character -> (String, Character)" ]
+      Ident.fromString "overloadedFunction1", parseType "String -> Character -> (String, Character)"
+      // math stuff
+      Ident.fromString "+", parseType "Integer -> Integer -> Integer" ]
 
 let tryInfer expr =
     result {
@@ -95,6 +97,11 @@ module Functions =
 
     [<Test>]
     let ``overloaded value``() = expect pass "overloadedFunction1 : String -> Integer -> (String, Integer)" "String -> Integer -> (String, Integer)"
+
+module Lambdas =
+
+    [<Test>]
+    let ``external function constrains lambda with one argument``() = expect pass "| x -> + x 1" "Integer -> Integer"
 
 module FailureTests =
     [<Test>]

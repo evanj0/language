@@ -187,6 +187,11 @@ module Solving =
                     t0)
             (cs, t)
 
+    /// Searches `overloads` for the overload that is likely intended according to the value of `t`.
+    /// Produces an error unless exactly one overload is found.
+    // TODO Implement the search algorithm
+    let searchForOverload (overloads: Type list) (t: Type) : Result<Type, Type.Error> =
+        failwith "Not Implemented"
 
     /// Separates a single constraint into multiple by separating types when possible.
     /// Produces errors.
@@ -326,6 +331,7 @@ module Solving =
                    | _ -> false) then
                 Ok [ c ]
             else
+                // TODO Implement a better search algorithm than this
                 tInners
                 |> List.tryFind (fun t -> outer |> Type.isMoreGeneralThan t)
                 |> Result.fromOption (Type.Error.overloadNotFound (name, outer) c.range)
@@ -382,6 +388,7 @@ module Inference =
 
     /// Produces a potentially unsolved type and constraints used to solve the type.
     /// Produces errors.
+    // TODO separate all of the cases into functions to share behavior with the TypedIr generator
     let rec infer
         (solver: (Type -> Constraints) -> Type IResult -> Type IResult)
         (expr: Expr)

@@ -25,8 +25,8 @@ let ``parens with one item``() = test "(a)" "ident"
 let ``parens with three items``() = test "(a, b, c)" "(tuple ident ident ident)"
 
 [<Test>]
-let ``lambda with one branch``() = test "| x -> x" "(func (match [ident] (case [ident] ident)))"
+let ``lambda with one branch``() = test "| x -> x" "(lambda (case [ident] ident))"
 [<Test>]
-let ``lambda with three branches``() = test "| x -> 1 | x -> 1.0 | x -> 'a'" "(func (match [ident] (case [ident] int) (case [ident] real) (case [ident] char)))"
+let ``lambda with three branches``() = test "| x -> 1 | x -> 1.0 | x -> 'a'" "(lambda (case [ident] int) (case [ident] real) (case [ident] char))"
 [<Test>]
-let ``lambda with three parameters and one branch``() = test "| x y z -> 0" "(func (func (func (match [(tuple ident ident ident)] (case [(tuple ident ident ident)] int)))))"
+let ``lambda with three parameters and one branch``() = test "| x y z -> 0" "(lambda (case [ident ident ident] int))"

@@ -224,74 +224,21 @@ let rec expr (x: expr) : Ast.Expression.Expression =
     match x with
     | SubExpr x -> subExpr x
     | Lambda (branch, branches) ->
-        let cases2Ast (xs: lambdaBranch list) =
-            let cases =
-                xs
-                |> List.map (fun (kw, _, x, xs, _, _, e) ->
-                    let patterns =
-                        x :: (xs |> List.map (fun (_, x) -> x))
-                        |> List.map pattern
-
-                    let astExpr = subExpr e
-
-                    (if patterns.Length = 1 then
-                         patterns |> List.head
-                     else
-                         Ast.Pattern.create (Ast.Pattern.Tuple patterns) (patterns |> List.head).range.start (patterns |> List.last).range.stop),
-                    astExpr,
-                    Range.create kw.start astExpr.range.stop)
-
-            cases |> List.map (fun (pat, ex, _) -> pat, ex),
-            Range.create
-                (match cases |> List.head with
-                 | (_, _, range) -> range.start)
-                (match cases |> List.last with
-                 | (_, _, range) -> range.stop)
-
-        let rec createParameters number =
-            assert (number >= 0)
-
-            match number with
-            | 0 -> []
-            | _ ->
-                let parameter =
-                    number
-                    |> NameGeneration.generateParamName
-                    |> Ast.Ident.create
-
-                parameter :: createParameters (number - 1)
-
-        let cases, range =
-            branch :: (branches |> List.map (fun (_, x) -> x))
-            |> cases2Ast
-
-        let rec createFunction matchingExpr (parameters: Ast.Ident list) =
-            match parameters with
-            | [] -> Ast.Expression.create (Ast.Expression.Match(matchingExpr, cases)) range.start range.stop
-            | p :: ps -> Ast.Expression.create (Ast.Expression.Function(p, createFunction matchingExpr ps)) range.start range.stop
-
-        let parameters =
-            createParameters (
-                match branch with
-                | (_, _, _, xs, _, _, _) -> 1 + xs.Length
-            )
-
-        let matchingExpr =
-            if parameters.Length = 1 then
-                parameters
-                |> List.head
-                |> Ast.Ident.toResolvedIdent
-                |> Ast.Expression.Identifier
-                |> fun ident -> Ast.Expression.create ident range.start range.stop
-            else
-                parameters
-                |> List.map Ast.Ident.toResolvedIdent
-                |> List.map Ast.Expression.Identifier
-                |> List.map (fun e -> Ast.Expression.create e range.start range.stop)
-                |> Ast.Expression.TupleConstructor
-                |> fun e -> Ast.Expression.create e range.start range.stop
-
-        createFunction matchingExpr parameters
+        let branches = 
+            branch 
+            :: (branches |> List.map (fun (_, x) -> x))
+            |> List.map (fun (kw, _, pat, pats, _, _, e) ->
+                let patterns = 
+                    pat 
+                    :: (pats |> List.map (fun (_, x) -> x))
+                    |> List.map pattern
+                let e = subExpr e
+                patterns, e, kw.start, e.range.stop
+                )
+        let (_, _, start, _) = branches |> List.head
+        let (_, _, _, stop) = branches |> List.last
+        let branches = branches |> List.map (fun (pats, expr, _, _) -> pats, expr)
+        Ast.Expression.create (Ast.Expression.Lambda branches) start stop
 
 
 and subExpr (x: subExpr) : Ast.Expression.Expression =

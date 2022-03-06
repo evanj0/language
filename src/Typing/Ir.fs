@@ -454,4 +454,8 @@ type Type = Type.Type
 
 [<RequireQualifiedAccess>]
 module Pattern =
-    type Pattern = Ident of name: string
+    type Pattern = 
+        | Ident of name: string
+        | Tuple of patterns: Pattern list
+
+type Pattern = Pattern.Pattern

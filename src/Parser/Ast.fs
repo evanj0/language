@@ -1,6 +1,7 @@
 ﻿module Ast
 
 open Range
+open ListExtensions
 
 /// Module names are stored in reverse order. `A::B::C::x` becomes `(x, [C; B; A])` or `(x, (cons C (cons B (cons C nil))))`
 type ResolvedIdent = ResolvedIdentifier of ident: string * modules: string list
@@ -116,13 +117,7 @@ module Expression =
         | Reference of expr: Expression
         | Dereference of expr: Expression
         | Mutate of expr: Expression * value: Expression
-
-        // TODO move to the higher level function generator notion of pattern matching/lambda
-        | Lambda of branches: (Pattern * Expression) list
-
-        // TODO get rid of these
-        | Function of parameter: Ident * body: Expression
-        | Match of expr: Expression * cases: (Pattern * Expression) list
+        | Lambda of branches: (Pattern list * Expression) list
 
     let create expr start stop = { Expression.expr = expr; Expression.range = Range.create start stop }
 
@@ -152,13 +147,12 @@ module Expression =
             |> List.fold (fun acc x -> sprintf "%s %s" acc x) "block" 
             |> sprintf "(%s)"
         | External (name, arg) -> sprintf "(extern '%s' %s)" name (signature arg)
-
-        | Function (_, expr) -> sprintf "(func %s)" (signature expr)
-        | Match (expr, cases) -> 
-            cases
-            |> List.map (fun (pat, expr) -> sprintf "(case [%s] %s)" (Pattern.signature pat) (signature expr))
-            |> List.fold (fun acc x -> sprintf "%s %s" acc x) (sprintf "match [%s]" (signature expr))
-            |> sprintf "(%s)"
+        | Lambda branches -> 
+            branches
+            |> List.map (fun (pats, expr) -> 
+                sprintf "(case [%s] %s)" (pats |> List.map Pattern.signature |> List.intercalate " ") (signature expr))
+            |> List.intercalate " "
+            |> sprintf "(lambda %s)"
         // TODO Implement
         | ExplicitType(expr, ty) -> failwith "Not Implemented"
         | RecordUpdate(expr, items) -> failwith "Not Implemented"

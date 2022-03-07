@@ -26,10 +26,6 @@ module Expr =
         | Deref of expr: Expr
         | Mut of expr: Expr * value: Expr
         | Func of p: string * body: Expr
-        | Match of expr: Expr * case: Case
-
-    and Case =
-        | Case of pat: Pattern.Pattern * expr: Expr * next: Case
-        | Default of expr: Expr
+        | Match of expr: Expr * cases: (Pattern * Expr) list
 
 type Expr = Expr.Expr

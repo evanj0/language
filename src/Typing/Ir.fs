@@ -6,10 +6,17 @@ open ListExtensions
 open ResultExtensions
 open Range
 
-type Uid = { index: int }
+type Uid = 
+    { index: int
+      label: string }
 [<RequireQualifiedAccess>]
 module Uid =
-    let print uid = sprintf "%d" uid.index
+    let create id = { Uid.index = id; label = "" }
+
+    let print uid = sprintf "%s`%d" uid.label uid.index
+
+    /// Ignores the label.
+    let equals a b = a.index = b.index
 
 [<RequireQualifiedAccess>]
 module Literal =
@@ -51,12 +58,14 @@ module Type =
         /// This is meant for overloaded types. Having this info later might be useful.
         | Tagged of uid: Uid * inner: Type
         /// Overloads of a function are put into this to prevent shadowing.
-        | Overloaded of overloads: Type list
+        /// `name` is only for error reporting.
+        | Unspecified of overloads: Type list * name: string
+        /// Type constructor that lists dependent variables, bounds, and holds originating environment.
         | Constructor of args: TVariable list * bounds: Bound list * env: (Ident * Type) list * body: Type
         /// Construct the type with the arguments.
         | Construct of args: (TVariable * Type) list * ctor: Type
         /// This is probably needed for having named abstractions that cannot be casted back to the structural type.
-        | Opaque of inner: Type
+        | Opaque of id: Uid * inner: Type
         | Unsafe of inner: Type
         | Reference of inner: Type
         | Primitive of Primitive
@@ -85,28 +94,43 @@ module Type =
         | Primitive Char -> "Char"
         | Primitive Bool -> "Bool"
         | Unknown x -> sprintf "<unknown`%d>" x.id
-        | Function (left, Function (rightl, rightr)) -> sprintf "%s -> (%s -> %s)" (print left) (print rightl) (print rightr)
+        | Opaque (id, t) -> sprintf "[%s: %s]" (Uid.print id) (print t)
+        | Function (Function (leftl, leftr), right) -> sprintf "(%s -> %s) -> %s" (print leftl) (print leftr) (print right)
         | Function (left, right) -> sprintf "%s -> %s" (print left) (print right)
-        | Tagged (uid, inner) -> sprintf "%s`%s" (print inner) (Uid.print uid)
+        | Tagged (uid, inner) -> sprintf "%s#%s" (print inner) (Uid.print uid)
         | Reference inner -> sprintf "%s&" (print inner)
         | Unsafe inner -> sprintf "%s!" (print inner)
+        | Tuple xs -> 
+            let inner = xs |> List.map print |> List.intercalate ", "
+            sprintf "(%s)" inner
+        | Unspecified (ts, name) ->
+            let ts = ts |> List.map print |> List.intercalate "; "
+            sprintf "[%s: %s]" name ts
 
     type Error =
         { message: string
           note: string
-          range: Range }
+          range: Range
+          /// Messages originating from the outside scope appear first.
+          trace: string list }
 
     [<RequireQualifiedAccess>]
     module Error =
         let create message range =
             { Error.message = message
               note = ""
-              range = range }
+              range = range
+              trace = [] }
 
         let createWithNote (message, note) range =
             { Error.message = message
               note = note
-              range = range }
+              range = range
+              trace = []  }
+
+        /// Prepends a trace message. Messages originating from the outside scope appear first.
+        let addTraceMessage message e =
+            { e with Error.trace = message :: e.trace }
 
         // TODO improve the language and consistency of the error messages.
         // TODO rename all of these
@@ -135,6 +159,26 @@ module Type =
         let insufficientTypeArgs arg ctor =
             sprintf "Couldn't construct type `%s` because one or more type arguments are missing, namely `%s`." (print ctor) (TVariable.print arg)
             |> create
+
+        // Separation errors:
+        let tupleElementCountMismatch outer inner =
+            sprintf "Couldn't match tuple `%s` with tuple `%s` because the numbers of elements are not equal." (print outer) (print inner) |> create
+
+        let opaqueTypeMismatch outer inner =
+            sprintf "Couldn't match opaque type `%s` with opaque type `%s` because the IDs are not equal." (print outer) (print inner) |> create
+        // --
+
+        // Inference errors:
+        let nameNotFound name =
+            sprintf "Couldn't find a value named `%s` in the local or module scope." (Ident.print name) |> create
+
+        let overloadNotFound (name, t) =
+            sprintf "Couldn't find an overload of `%s` that matches type `%s`." name (print t) |> create
+
+        let insufficientOverloadSpecifier (name, t) =
+            sprintf "Couldn't determine a single overload of `%s` to use based on the specifier `%s`." name (print t) |> create
+
+        // TODO remove below
 
         let ``value not found`` ident =
             sprintf "The value `%s` is not defined in the local or module scope." (Ident.print ident)
@@ -234,19 +278,16 @@ module Type =
         | Union variants ->
             let state, ts = substElements id (fun _ -> id) state variants
             state, Union ts
-        | Overloaded overloads ->
-            substElements id (fun _ t -> t) state overloads
-            |> fun (state, xs) -> state, Overloaded xs
-        | Constructor (args, bounds, env, body) ->
-            // map through body and add to a new list an argument if the mapping hits a variable that is in
-            // the old args
-            // env should not be touched
-            // bounds need to be updated
+        | Unspecified (ts, n) ->
+            substElements id (fun _ t -> t) state ts
+            |> fun (state, ts) -> state, Unspecified (ts ,n)
+        | Constructor (_args, _bounds, _env, _body) ->
             failwith "Not Implemented"
         // TODO check for other cases where the type can contain other types
         | t -> mapping state t
 
 
+    // TODO Update which types get traversed
     /// Directionally compares types; `other` can be more general than `this`.
     /// Runs `f` on `(this, other)` and returns all results.
     /// ```
@@ -267,14 +308,14 @@ module Type =
                 Ok res
             else
                 Error(Error.``couldn't match variable`` a b)
-        | Opaque this, Opaque other -> this |> tryMatch other
+        | Opaque (_, this), Opaque (_, other) -> this |> tryMatch other // TODO (type-subst) compare ids
         | Primitive Str, Primitive Str -> Ok res
         | Primitive Int, Primitive Int -> Ok res
         | Primitive Real, Primitive Real -> Ok res
         | Primitive Char, Primitive Char -> Ok res
         | Primitive Bool, Primitive Bool -> Ok res
         // TODO Test for these cases to determine if they are actually unreachable
-        | Overloaded _, Overloaded _ -> failStr "tryMatch Overloaded Overloaded is unreachable"
+        | Unspecified _, Unspecified _ -> failStr "tryMatch Overloaded Overloaded is unreachable"
         | Constructor _, Constructor _ -> failStr "tryMatch Constructor Constructor is unreachable"
         | Function (thisL, thisR), Function (otherL, otherR) ->
             result {
@@ -327,10 +368,46 @@ module Type =
             |> Result.collect
         | _ -> Error(Error.typeMismatch this other)
 
-    let equals other t = // TODO fix
-        t 
-        |> tryMatch (fun _ -> []) other
-        |> Result.isOk
+    let rec equals (inner: Type) (outer: Type) : bool =
+        match outer, inner with
+        | Primitive Int, Primitive Int -> true
+        | Primitive Str, Primitive Str -> true
+        | Primitive Real, Primitive Real -> true
+        | Primitive Char, Primitive Char -> true
+        | Primitive Bool, Primitive Bool -> true
+        | Unknown(id1), Unknown(id2) -> TUnknown.equals id1 id2
+        | Variable(id1),Variable(id2) -> TVariable.equals id1 id2
+        | Named(name1, _),Named(name2, _) -> Ident.equals name1 name2
+        | Tagged(_, inner1), Tagged(_, inner2) -> equals inner1 inner2 // uid can be different
+        | Unspecified(overloads1, _), Unspecified(overloads2, _) -> List.unorderedCmp equals overloads1 overloads2
+        | Constructor(_, _, _, _), Constructor(_, _, _, _) -> failwith "unreachable"
+        | Construct(_, _), Construct(_, _) -> failwith "unreachable"
+        | Opaque(id1, inner1), Opaque(id2, inner2) -> Uid.equals id1 id2 && inner1 |> equals inner2
+        | Unsafe(inner1), Unsafe(inner2) -> equals inner1 inner2
+        | Reference(inner1), Reference(inner2) -> equals inner1 inner2
+        | Function(left1, right1), Function(left2, right2) -> equals left1 left2 && equals right1 right2
+        | Tuple(elements1), Tuple(elements2) -> elements1.Length = elements2.Length && List.zip elements1 elements2 |> List.map (fun (a, b) -> equals a b) |> List.forall id
+        | Record(elements1), Record(elements2) -> failwith "Not Implemented"
+        | Union(elements1), Union(elements2) -> failwith "Not Implemented"
+        | _ -> false
+
+    /// Possibly counterinuitive. More general does not mean more fields or more variants.
+    /// `{a: T} :> {a: T, b: U}`
+    /// `T|U :> T|U|V`
+    /// `T :> 'a` 
+    let rec isMoreGeneralThan inner outer =
+        match outer, inner with
+        | Record outer, Record inner ->
+            List.containsUnordered (fun (oname, otype) (iname, itype) -> oname = iname && isMoreGeneralThan otype itype) outer inner
+        | Union outer, Union inner ->
+            List.containsUnordered isMoreGeneralThan outer inner
+        | t, Unknown _ -> true
+        | Function(left1, right1), Function(left2, right2) -> left1 |> isMoreGeneralThan left2 && right1 |> isMoreGeneralThan right2
+        | Tuple(elements1), Tuple(elements2) -> elements1.Length = elements2.Length && List.zip elements1 elements2 |> List.map (fun (a, b) -> a |> isMoreGeneralThan b) |> List.forall id
+        | Opaque(id1, inner1), Opaque(id2, inner2) -> Uid.equals id1 id2 && inner1 |> isMoreGeneralThan inner2
+        | Unsafe(inner1), Unsafe(inner2) -> inner1 |> isMoreGeneralThan inner2
+        | Reference(inner1), Reference(inner2) -> inner1 |> isMoreGeneralThan inner2
+        | _ -> outer |> equals inner
 
     let subst var newType t =
         t 
@@ -365,7 +442,7 @@ module Type =
         |> mapContained
             (fun state t1 ->
                 match t1 with
-                | Type.Unknown var -> 
+                | Unknown var -> 
                     if state |> List.contains var then
                         state, t1
                     else var :: state, t1
@@ -378,13 +455,27 @@ module Type =
                 |> List.map (fun (index, x) -> x, TVariable.create index)
             let newT =
                 substitutions
-                |> List.map (fun (x, var) -> x, Type.Variable var)
+                |> List.map (fun (x, var) -> x, Variable var)
                 |> List.fold (fun acc (x, t) -> acc |> substUnknown x t) t
             let args = substitutions |> List.map (fun (_x, var) -> var)
-            Type.Constructor(args, [], env, newT)
+            Constructor(args, [], env, newT)
+
+    let contains pred t =
+        t 
+        |> mapContained 
+            (fun state t ->
+                match state, t with
+                | true, t -> true, t
+                | _, t -> pred t, t)
+            false
+        |> fun (x, _t) -> x
 
 type Type = Type.Type
 
 [<RequireQualifiedAccess>]
 module Pattern =
-    type Pattern = Ident of name: string
+    type Pattern = 
+        | Ident of name: string
+        | Tuple of patterns: Pattern list
+
+type Pattern = Pattern.Pattern

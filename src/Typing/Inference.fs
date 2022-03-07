@@ -171,30 +171,36 @@ module Solving =
                 | _ -> [])
 
     let substituteInto (cs: Constraints) (t: Type) (subs: (Type.TUnknown * Type) list) : Constraints * Type =
+        let shouldSub t = 
+            match t with
+            | Type.Unspecified _ -> false // don't want to do substitutions if t is unspecified
+            | _ -> true
         subs
         |> List.fold
             (fun (cs, t0) (x, t) ->
                 cs
                 |> List.map (fun c ->
                     { c with
-                        Constraint.outer = c.outer |> Type.substUnknown x t
-                        Constraint.inner = c.inner |> Type.substUnknown x t }),
-                if (match t with
-                    | Type.Unspecified _ -> false // don't want to do substitutions if t is unspecified
-                    | _ -> true) then
-                    t0 |> Type.substUnknown x t
-                else
-                    t0)
+                        Constraint.outer = if shouldSub t then c.outer |> Type.substUnknown x t else c.outer
+                        Constraint.inner = if shouldSub t then c.inner |> Type.substUnknown x t else c.inner }),
+                if shouldSub t then t0 |> Type.substUnknown x t else t0)
             (cs, t)
 
     /// Searches `overloads` for the overload that is likely intended according to the value of `t`.
-    /// Produces an error unless exactly one overload is found.
+    /// Produces a `Type.Error` if no overloads are found.
+    /// Returns `None` if there are more than one overloads found, indicating that the specifier is not complete.
     // TODO Implement the search algorithm
-    let searchForOverload (overloads: Type list) (t: Type) : Result<Type, Type.Error> =
-        failwith "Not Implemented"
+    let searchOverloads (overloads: Type list) (t: Type) : Result<Type, string -> Range -> Type.Error> option =
+        overloads
+        |> List.filter (Type.isMoreGeneralThan t)
+        |> fun list ->
+            match list with
+            | t::[] -> Some(Ok t)
+            | [] -> Some(Error(fun name -> Type.Error.overloadNotFound (name, t)))
+            | _ts -> None
 
     /// Separates a single constraint into multiple by separating types when possible.
-    /// Produces errors.
+    /// Produces a `Type.Error`.
     let rec separateConstraint (c: Constraint) : Result<Constraints, Type.Error> =
 
         // This should always be used in this since it adds the trace message.
@@ -313,29 +319,22 @@ module Solving =
         | Type.Unspecified _, Type.Unspecified _ -> Ok [ c ]
 
         | Type.Unspecified (tOuters, name), inner ->
-            if inner
-               |> Type.contains (function
-                   | Type.Unknown _ -> true
-                   | _ -> false) then
-                Ok [ c ]
-            else
-                tOuters
-                |> List.tryFind (fun t -> t |> Type.isMoreGeneralThan inner)
-                |> Result.fromOption (Type.Error.overloadNotFound (name, inner) c.range)
+            match searchOverloads tOuters inner with
+            | Some result -> 
+                result
+                |> Result.mapError (fun e -> e name)
+                |> Result.mapError error // Add range and trace messages
                 |> Result.bind (fun t -> separateNewConstraint t inner)
+            | None -> Ok [ c ]
 
         | outer, Type.Unspecified (tInners, name) ->
-            if outer
-               |> Type.contains (function
-                   | Type.Unknown _ -> true
-                   | _ -> false) then
-                Ok [ c ]
-            else
-                // TODO Implement a better search algorithm than this
-                tInners
-                |> List.tryFind (fun t -> outer |> Type.isMoreGeneralThan t)
-                |> Result.fromOption (Type.Error.overloadNotFound (name, outer) c.range)
+            match searchOverloads tInners outer with
+            | Some result ->
+                result
+                |> Result.mapError (fun e -> e name)
+                |> Result.mapError error // Add range and trace messages
                 |> Result.bind (fun t -> separateNewConstraint outer t)
+            | None -> Ok [ c ]
 
         // TODO Decide on specific error messages to add here
 
@@ -352,7 +351,7 @@ module Solving =
 
     let rec solveConstraints (cs: Constraints) (t: Type) : Result<Constraints * Type, Type.Error> =
         
-        let _ = 1
+        let _debugBreakpoint = 1
         result {
             let! cs = separateConstraints cs
             let subs = findSubstitutions cs
@@ -365,11 +364,11 @@ module Solving =
         }
 
     /// Verifies constraints that do not contribute to the final type.
-    /// Produces errors.
+    /// Produces a `Type.Error`.
     let verifyConstraints (cs: Constraints) : Result<Constraint list, Type.Error> =
         cs
         |> List.map (fun c ->
-            if c.outer |> Type.isMoreGeneralThan c.inner then
+            if c.outer |> Type.equals c.inner then
                 Ok c
             else
                 Error(
@@ -380,14 +379,14 @@ module Solving =
 
 
     /// Checks for remaining unknowns types in `cs` and `t`.
-    /// Produces errors.
+    /// Produces a `Type.Error`.
     let checkForUnknowns cs t = failwith "Not Implemented" // TODO this should check for any remaining unknowns.
 
 [<RequireQualifiedAccess>]
 module Inference =
 
     /// Produces a potentially unsolved type and constraints used to solve the type.
-    /// Produces errors.
+    /// Produces a `Type.Error`.
     // TODO separate all of the cases into functions to share behavior with the TypedIr generator
     let rec infer
         (solver: (Type -> Constraints) -> Type IResult -> Type IResult)

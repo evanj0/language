@@ -24,6 +24,7 @@ module List =
     let intercalate (sep: string) (list: string list) = System.String.Join(sep, list)
 
     /// Runs `comparer` on an element from `list1` and an element from `list2`.
+    /// Returns `false` if the lists are of different sizes. 
     let unorderedCmp (comparer: 'a -> 'b -> bool) (list1: 'a list) (list2: 'b list) : bool =
         if list1.Length = list2.Length then
             list1
@@ -34,3 +35,12 @@ module List =
             |> List.forall id
         else 
             false
+    
+    /// Runs `comparer` on an element from `list1` and an element from `list2`.
+    let containsUnordered (comparer: 'a -> 'b -> bool) (list1: 'a list) (list2: 'b list) : bool =
+        list1
+            |> List.map (fun a ->
+                list2
+                |> List.tryFind (fun b -> comparer a b)
+                |> Option.isSome)
+            |> List.forall id

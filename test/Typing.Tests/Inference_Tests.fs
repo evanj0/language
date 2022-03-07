@@ -35,7 +35,11 @@ let globals =
       Ident.fromString "overloadedFunction1", parseType "String -> Real      -> (String, Real)"
       Ident.fromString "overloadedFunction1", parseType "String -> Character -> (String, Character)"
       // math stuff
-      Ident.fromString "+", parseType "Integer -> Integer -> Integer" ]
+      Ident.fromString "+", parseType "Integer -> Integer -> Integer"
+      Ident.fromString "+", parseType "Real -> Real -> Real"
+      Ident.fromString "==", parseType "Integer -> Integer -> Boolean"
+      Ident.fromString "==", parseType "Real -> Real -> Real"
+      Ident.fromString "and", parseType "Boolean -> Boolean -> Boolean" ]
 
 let tryInfer expr =
     result {
@@ -66,7 +70,7 @@ let pass t (result: Result<_, Type.Error>) =
     | Ok resultT ->
         printfn "Expected: %s" (Type.print t)
         printfn "Got: %s" (Type.print resultT)
-        Assert.True(t |> Type.isMoreGeneralThan resultT)
+        Assert.True(t |> Type.equals resultT)
     | Error e -> Assert.Fail(printError e)
 
 let fail _ (result: Result<_, Type.Error>) =
@@ -98,10 +102,19 @@ module Functions =
     [<Test>]
     let ``overloaded value``() = expect pass "overloadedFunction1 : String -> Integer -> (String, Integer)" "String -> Integer -> (String, Integer)"
 
+    [<Test>]
+    let ``overloaded function without annotation``() = expect pass "overloadedFunction1 \"string\" 1" "(String, Integer)"
+
 module Lambdas =
 
     [<Test>]
-    let ``external function constrains lambda with one argument``() = expect pass "| x -> + x 1" "Integer -> Integer"
+    let ``overloaded function constrains lambda with one argument``() = expect pass "| x -> + x 1" "Integer -> Integer"
+
+    [<Test>]
+    let ``overloaded function constrains lambda with two arguments``() = expect pass "| x y -> + (+ x y) 1.0" "Real -> Real -> Real"
+
+    [<Test>]
+    let ``lambda with deeply nested expressions``() = expect pass "| x y z -> if == (+ x 1) (+ x (+ 1 y)) then (| x -> and x z) else (| x -> and x true)" "Integer -> Integer -> Boolean -> (Boolean -> Boolean)"
 
 module FailureTests =
     [<Test>]

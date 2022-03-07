@@ -175,6 +175,9 @@ module Type =
         let overloadNotFound (name, t) =
             sprintf "Couldn't find an overload of `%s` that matches type `%s`." name (print t) |> create
 
+        let insufficientOverloadSpecifier (name, t) =
+            sprintf "Couldn't determine a single overload of `%s` to use based on the specifier `%s`." name (print t) |> create
+
         // TODO remove below
 
         let ``value not found`` ident =
@@ -365,7 +368,7 @@ module Type =
             |> Result.collect
         | _ -> Error(Error.typeMismatch this other)
 
-    let rec isMoreGeneralThan (inner: Type) (outer: Type) : bool =
+    let rec equals (inner: Type) (outer: Type) : bool =
         match outer, inner with
         | Primitive Int, Primitive Int -> true
         | Primitive Str, Primitive Str -> true
@@ -375,19 +378,36 @@ module Type =
         | Unknown(id1), Unknown(id2) -> TUnknown.equals id1 id2
         | Variable(id1),Variable(id2) -> TVariable.equals id1 id2
         | Named(name1, _),Named(name2, _) -> Ident.equals name1 name2
-        | Tagged(_, inner1), Tagged(_, inner2) -> isMoreGeneralThan inner1 inner2 // uid can be different
-        | Unspecified(overloads1, _), Unspecified(overloads2, _) -> List.unorderedCmp isMoreGeneralThan overloads1 overloads2
+        | Tagged(_, inner1), Tagged(_, inner2) -> equals inner1 inner2 // uid can be different
+        | Unspecified(overloads1, _), Unspecified(overloads2, _) -> List.unorderedCmp equals overloads1 overloads2
         | Constructor(_, _, _, _), Constructor(_, _, _, _) -> failwith "unreachable"
         | Construct(_, _), Construct(_, _) -> failwith "unreachable"
-        | Opaque(id1, inner1), Opaque(id2, inner2) -> Uid.equals id1 id2 
-        | Unsafe(inner1), Unsafe(inner2) -> isMoreGeneralThan inner1 inner2
-        | Reference(inner1), Reference(inner2) -> isMoreGeneralThan inner1 inner2
-        | Function(left1, right1), Function(left2, right2) -> isMoreGeneralThan left1 left2 && isMoreGeneralThan right1 right2
-        | Tuple(elements1), Tuple(elements2) -> elements1.Length = elements2.Length && List.zip elements1 elements2 |> List.map (fun (a, b) -> isMoreGeneralThan a b) |> List.forall id
+        | Opaque(id1, inner1), Opaque(id2, inner2) -> Uid.equals id1 id2 && inner1 |> equals inner2
+        | Unsafe(inner1), Unsafe(inner2) -> equals inner1 inner2
+        | Reference(inner1), Reference(inner2) -> equals inner1 inner2
+        | Function(left1, right1), Function(left2, right2) -> equals left1 left2 && equals right1 right2
+        | Tuple(elements1), Tuple(elements2) -> elements1.Length = elements2.Length && List.zip elements1 elements2 |> List.map (fun (a, b) -> equals a b) |> List.forall id
         | Record(elements1), Record(elements2) -> failwith "Not Implemented"
         | Union(elements1), Union(elements2) -> failwith "Not Implemented"
         | _ -> false
 
+    /// Possibly counterinuitive. More general does not mean more fields or more variants.
+    /// `{a: T} :> {a: T, b: U}`
+    /// `T|U :> T|U|V`
+    /// `T :> 'a` 
+    let rec isMoreGeneralThan inner outer =
+        match outer, inner with
+        | Record outer, Record inner ->
+            List.containsUnordered (fun (oname, otype) (iname, itype) -> oname = iname && isMoreGeneralThan otype itype) outer inner
+        | Union outer, Union inner ->
+            List.containsUnordered isMoreGeneralThan outer inner
+        | t, Unknown _ -> true
+        | Function(left1, right1), Function(left2, right2) -> left1 |> isMoreGeneralThan left2 && right1 |> isMoreGeneralThan right2
+        | Tuple(elements1), Tuple(elements2) -> elements1.Length = elements2.Length && List.zip elements1 elements2 |> List.map (fun (a, b) -> a |> isMoreGeneralThan b) |> List.forall id
+        | Opaque(id1, inner1), Opaque(id2, inner2) -> Uid.equals id1 id2 && inner1 |> isMoreGeneralThan inner2
+        | Unsafe(inner1), Unsafe(inner2) -> inner1 |> isMoreGeneralThan inner2
+        | Reference(inner1), Reference(inner2) -> inner1 |> isMoreGeneralThan inner2
+        | _ -> outer |> equals inner
 
     let subst var newType t =
         t 

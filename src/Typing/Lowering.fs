@@ -39,6 +39,7 @@ module Lower =
         | Ast.Expression.Application (f, x) -> UntypedIr.Expr.App(lExpr f, lExpr x)
         | Ast.Expression.TupleConstructor xs -> xs |> List.map lExpr |> UntypedIr.Expr.Tuple
         | Ast.Expression.ExplicitType (expr, t) -> UntypedIr.Expr.Type(lExpr expr, lQuantifiedType t)
+        | Ast.Expression.Conditional (guard, t, e) -> UntypedIr.Expr.Cond(lExpr guard, lExpr t, lExpr e)
         | Ast.Expression.Lambda cases ->
 
             let createParameters count =

@@ -15,7 +15,6 @@ module Expr =
         | Record of elements: (string * Expr) list
         | Block of expr: Expr * next: Expr
         | Extern of name: string * argument: Expr
-        | NoRet
         | Type of expr: Expr * t: Type.Type
         | Update of expr: Expr * fields: (string * Expr) list
         | App of f: Expr * x: Expr

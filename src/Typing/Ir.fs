@@ -54,7 +54,7 @@ module Type =
         /// instantiation is not necessary.
         | Variable of id: TVariable
         /// Named abstraction. Needed for recursive types.
-        | Named of name: Ident * env: (Ident * Type) list
+        | Named of name: Ident
         /// This is meant for overloaded types. Having this info later might be useful.
         | Tagged of uid: Uid * inner: Type
         /// Overloads of a function are put into this to prevent shadowing.
@@ -377,7 +377,7 @@ module Type =
         | Primitive Bool, Primitive Bool -> true
         | Unknown(id1), Unknown(id2) -> TUnknown.equals id1 id2
         | Variable(id1),Variable(id2) -> TVariable.equals id1 id2
-        | Named(name1, _),Named(name2, _) -> Ident.equals name1 name2
+        | Named(name1),Named(name2) -> Ident.equals name1 name2
         | Tagged(_, inner1), Tagged(_, inner2) -> equals inner1 inner2 // uid can be different
         | Unspecified(overloads1, _), Unspecified(overloads2, _) -> List.unorderedCmp equals overloads1 overloads2
         | Constructor(_, _, _, _), Constructor(_, _, _, _) -> failwith "unreachable"

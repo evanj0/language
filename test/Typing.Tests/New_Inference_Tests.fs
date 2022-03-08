@@ -20,7 +20,11 @@ let parseType str =
 
 let parseExpr str =
     match Parse.expr str with
-    | Ok x -> x |> Lowering.Lower.lExpr |> TypedIr.fromUntyped TypedIr.State.init |> fun (state, expr) -> expr
+    | Ok x ->
+        x
+        |> Lowering.Lower.lExpr
+        |> TypedIr.fromUntyped TypedIr.State.init
+        |> fun (state, expr) -> expr
     | Error e ->
         printfn "%s" e
         failwith "Expression parsing in test case failed."
@@ -40,7 +44,9 @@ let globals =
       Ident.fromString "+", parseType "Real -> Real -> Real"
       Ident.fromString "==", parseType "Integer -> Integer -> Boolean"
       Ident.fromString "==", parseType "Real -> Real -> Real"
-      Ident.fromString "and", parseType "Boolean -> Boolean -> Boolean" ]
+      Ident.fromString "and", parseType "Boolean -> Boolean -> Boolean"
+      
+      Ident.fromString "List", parseType "List -> List" ]
 
 let tryInfer expr =
     result {
@@ -55,17 +61,18 @@ let tryInfer expr =
         let env =
             { Inference.Env.currentRange = range
               Inference.Env.globals = globals
+              Inference.Env.abstractions = []
               Inference.Env.locals = [] }
 
         let constrainer = fun _t _env -> []
 
         let! cs =
-            Typing.infer Typing.defaultSolver expr constrainer env
+            Typing.infer (Typing.defaultSolver env) expr constrainer env
             |> Typing.TResult.toResult
 
         let t = expr.t
 
-        let! cs, t = Solving.solveConstraints cs t
+        let! cs, t = Solving.solveConstraints env cs t
         let! _ = Solving.verifyConstraints cs
         return t
     }
@@ -99,24 +106,63 @@ let fail _ (result: Result<_, Type.Error>) =
     | Error e -> Assert.Pass(printError e)
 
 module IfExpression =
-    module ShouldFail =
-        [<Test>]
-        let ``when type of branches does not match``() = expect fail "if true then 1 else 1.5" "()"
-
-        [<Test>]
-        let ``when type of guard is not bool``() = expect fail "if 1 then 1 else 1" "()"
-
     module ShouldPass =
         [<Test>]
-        let ``when type of guard is bool and types of branches agree``() = expect pass "if true then 1 else 2" "Integer"
+        let ``when type of guard is bool and types of branches agree`` () =
+            expect pass "if true then 1 else 2" "Integer"
+
+    module ShouldFail =
+        [<Test>]
+        let ``when type of branches does not match`` () =
+            expect fail "if true then 1 else 1.5" "()"
+
+        [<Test>]
+        let ``when type of guard is not bool`` () = expect fail "if 1 then 1 else 1" "()"
 
 module Ident =
     module ShouldPass =
         [<Test>]
-        let ``when value is not overloaded``() = expect pass "fnOne" "Integer -> Integer"
+        let ``when value is not overloaded`` () =
+            expect pass "fnOne" "Integer -> Integer"
+
+        [<Test>]
+        let ``when value is overloaded and specifier is provided`` () = expect pass "+ 1 1" "Integer"
 
     module ShouldFail =
         [<Test>]
-        let ``when value is overloaded and no specifier is provided``() = expect fail "+" "()"
+        let ``when value is overloaded and no specifier is provided`` () = expect fail "+" "()"
 
-        // TODO this is failing because the substitution/solving algorithm never stops when cs contains one constraint that cannot be substituted.
+        [<Test>]
+        let ``when value is overloaded and no matching specifier is provided`` () = expect fail "+ 1 1.5" "()"
+
+module Func =
+    module ShouldPass =
+        [<Test>]
+        let ``when constrained by a known global function`` () =
+            expect pass "|x -> + 1 x" "Integer -> Integer"
+
+module Type =
+    module ShouldPass =
+        [<Test>]
+        let ``when externally constraining a lambda that uses an overloaded value`` () =
+            expect pass "(|a b -> + a b) : Integer -> Integer -> Integer" "Integer -> Integer -> Integer"
+
+        [<Test>]
+        let ``when used to constrain parameters of a lambda``() =
+            expect pass "|a b -> + (a: Integer) b" "Integer -> Integer -> Integer"
+
+    module ShouldFail =
+
+        [<Test>]
+        let ``when the provided type does not match the inferred type``() =
+            expect fail "fnOne : String" "()"
+
+        [<Test>]
+        let ``when incorrectly specifying an overloaded value``() =
+            expect fail "+ : Boolean -> String" "()"
+
+module Let =
+    module ShouldPass =
+        [<Test>]
+        let ``when binding a fully inferrable value``() =
+            expect pass "@{ let x = 1000; x }" "Integer"

@@ -20,16 +20,17 @@ module Expr =
         | App of f: Expr * x: Expr * t: Type
         | Let of name: string * expr: Expr * body: Expr * t: Type
         | UnsafeLet of name: string * expr: Expr * body: Expr * t: Type
-        | Cond of guard: Expr * th: Expr * el: Expr * t: Type
+        | Cond of guard: Expr * th: Expr * el: Expr
         | Ref of expr: Expr * t: Type
         | Deref of expr: Expr * t: Type
         | Mut of expr: Expr * value: Expr * t: Type
-        | Func of p: string * body: Expr * pt: Type * rt: Type
+        | Func of p: string * body: Expr * pt: Type
         | Match of expr: Expr * cases: (Pattern * Expr) list * t: Type
         member this.t =
             match this with
             | Tagged (expr, _tag) -> expr.t
-            | Func (pt = pt; rt = rt) -> Type.Function(pt, rt)
+            | Func (pt = pt; body = body) -> Type.Function(pt, body.t)
+            | Cond (th = th) -> th.t
             | Ident (t = t)
             | Literal (t = t)
             | Tuple (t = t)
@@ -41,7 +42,6 @@ module Expr =
             | App (t = t)
             | Let (t = t)
             | UnsafeLet (t = t)
-            | Cond (t = t)
             | Ref (t = t)
             | Deref (t = t)
             | Mut (t = t)
@@ -138,4 +138,10 @@ module TypedIr =
             let state, guard = guard |> fromUntyped state
             let state, th = th |> fromUntyped state
             let state, el = el |> fromUntyped state
-            state, Expr.Cond(guard, th, el, th.t)
+            state, Expr.Cond(guard, th, el)
+        
+        
+        | UExpr.Func(p, body) ->
+            let state, pt = state |> State.unknown
+            let state, body = body |> fromUntyped state
+            state, Expr.Func(p, body, pt)

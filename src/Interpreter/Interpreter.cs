@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -58,13 +59,14 @@ public static class Interpreter
                     }
 
                 case OpCode.Return:
-                    if (vm.Frames.Count == 0)
                     {
-                        throw new CallStackUnderflowException();
+                        var frame = PopCurrentFrame(ref vm);
+                        vm.Ip = frame.ReturnAddr;
+                        var returnValue = vm.Stack.Pop();
+                        vm.Stack.Data[frame.BasePtr] = returnValue;
+                        vm.Stack.Sp = frame.BasePtr + 1;
+                        break;
                     }
-                    var frame = vm.Frames.Pop();
-                    vm.Ip = frame.ReturnAddr;
-                    break;
 
                 // bool -> 
                 case OpCode.JumpIfFalse:
@@ -84,7 +86,23 @@ public static class Interpreter
                     output.WriteLine(vm.Debug());
                     break;
 
-                // Math
+                // Stack Ops
+
+                case OpCode.Local:
+                    {
+                        var index = PeekCurrentFrame(ref vm).BasePtr + inst.Data.ToI32();
+                        var value = vm.Stack.Index(index);
+                        vm.Stack.Push(value);
+                        break;
+                    }
+
+                case OpCode.SetLocalOffset:
+                    {
+                        var frame = vm.Frames.Pop();
+                        frame.BasePtr -= inst.Data.ToI32();
+                        vm.Frames.Push(frame);
+                        break;
+                    }
 
                 //  -> i64
                 case OpCode.PushI64:
@@ -95,6 +113,9 @@ public static class Interpreter
                 case OpCode.PushBool:
                     vm.Stack.Push(inst.Data);
                     break;
+
+
+                // Math
 
                 // i64 i64 -> i64
                 case OpCode.AddI64:
@@ -120,6 +141,26 @@ public static class Interpreter
 
             vm.Ip++;
         }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static Frame PeekCurrentFrame(ref Vm vm)
+    {
+        if (vm.Frames.Count == 0)
+        {
+            throw new CallStackUnderflowException();
+        }
+        return vm.Frames.Peek();
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static Frame PopCurrentFrame(ref Vm vm)
+    {
+        if (vm.Frames.Count == 0)
+        {
+            throw new CallStackUnderflowException();
+        }
+        return vm.Frames.Pop();
     }
 }
 

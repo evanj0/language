@@ -28,6 +28,10 @@ namespace Interpreter
         /// </summary>
         Call,
 
+        /// <summary>
+        /// <code>(return)</code>
+        /// Copies the top value to localoffset + 0. Lowers stack pointer to localoffset + 1.
+        /// </summary>
         Return,
 
         /// <summary>
@@ -72,9 +76,15 @@ namespace Interpreter
         PushBool,
 
         /// <summary>
-        /// ptr
+        /// <code>(local idx)</code>
+        /// Pushes the value at the index to the stack.
         /// </summary>
         Local,
+
+        /// <summary>
+        /// ptr
+        /// </summary>
+        SetLocalOffset,
 
 
         // Math

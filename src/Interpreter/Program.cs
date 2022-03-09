@@ -30,9 +30,11 @@ var program = new Op[]
 
     // proc 1:
     new Op(OpCode.NoOp), // 14
+    new Op(OpCode.SetLocalOffset, Word.Ptr(1)),
     new Op(OpCode.PushI64, Word.FromI64(1000)),
+    new Op(OpCode.Local, Word.Ptr(0)), // local 0
     new Op(OpCode.CmpEqI64),
-    new Op(OpCode.Call, Word.Ptr(1)),
+    // new Op(OpCode.Call, Word.Ptr(1)),
     new Op(OpCode.Return),
 };
 

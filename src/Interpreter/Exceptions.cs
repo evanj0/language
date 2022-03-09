@@ -31,9 +31,19 @@ namespace Interpreter.Exceptions
         public ProcedureDoesNotExistException(int index) : base($"Procedure at index `{index}` does not exist.") { }
     }
 
-    internal class ProcedureStackUnderflowException : VmException
+    internal class BlockDoesNotExistException : VmException
     {
-        public ProcedureStackUnderflowException() : base($"The procedure stack has underflowed.") { }
+        public BlockDoesNotExistException(int index) : base($"Block at index `{index}` does not exist.") { }
+    }
+
+    internal class CallStackUnderflowException : VmException
+    {
+        public CallStackUnderflowException() : base("The call stack has underflowed.") { }
+    }
+
+    internal class CallStackOverflowException : VmException
+    {
+        public CallStackOverflowException(int count) : base($"The call stack has overflowed ({count} calls).") { }
     }
 
     internal class InstructionNotSupportedException : VmException

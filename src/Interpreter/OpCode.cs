@@ -10,25 +10,67 @@ namespace Interpreter
     public enum OpCode
     {
         // Control Flow
+
+        /// <summary>
+        /// i32
+        /// </summary>
         Exit,
+
         NoOp,
+
+        /// <summary>
+        /// ptr
+        /// </summary>
         SetIp,
+
+        /// <summary>
+        /// ptr
+        /// </summary>
         Call,
+
         Return,
 
+        SkipIfFalse,
+
+        Skip,
+
         // Debugging
+
         Dump,
 
         // Stack Ops
+
+        /// <summary>
+        /// i64
+        /// </summary>
         PushI64,
+
+        /// <summary>
+        /// f64
+        /// </summary>
         PushF64,
+
+        /// <summary>
+        /// char
+        /// </summary>
         PushChar,
+
+        /// <summary>
+        /// bool
+        /// </summary>
         PushBool,
-        PushPtr,
+
+        /// <summary>
+        /// ptr
+        /// </summary>
         Local,
 
+
         // Math
+
         AddI64,
+
+        CmpEqI64,
     }
 
     public static class OpCodeExtensions 
@@ -48,7 +90,15 @@ namespace Interpreter
             OpCode = opCode;
             Data = data;
         }
+
+        public Op(OpCode opCode)
+        {
+            OpCode = opCode;
+            Data = Word.Zero();
+        }
+
         public OpCode OpCode;
+
         public Word Data;
     }
 }

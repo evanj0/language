@@ -74,7 +74,18 @@ namespace Interpreter
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Word Zero() => Word.FromI64(0);
+        public static Word FromBool(bool value)
+        {
+            var word = new Word();
+            if (value)
+            {
+                word.Byte0 = 1;
+            }
+            return word;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static Word Zero() => FromI64(0);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public long ToI64()
@@ -100,6 +111,17 @@ namespace Interpreter
                     return *intPtr;
                 }
             }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public bool ToBool()
+        {
+            return Byte0 == 1;
+        }
+
+        public string Debug()
+        {
+            return $"Int64 = {ToI64()}, Bool = {ToBool()}";
         }
     }
 }

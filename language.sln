@@ -15,7 +15,9 @@ Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Typing.Tests", "test\Typing
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "test", "test", "{4978BE17-44B7-4B87-9FF4-C35A178268AB}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Generation", "src\Generation\Generation.fsproj", "{E332E59E-60F1-475D-A84E-DEC963442AE7}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Generation", "src\Generation\Generation.fsproj", "{E332E59E-60F1-475D-A84E-DEC963442AE7}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Interpreter", "src\Interpreter\Interpreter.csproj", "{C1365C6B-4020-4409-A9F7-09403EA4DA21}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -47,6 +49,10 @@ Global
 		{E332E59E-60F1-475D-A84E-DEC963442AE7}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{E332E59E-60F1-475D-A84E-DEC963442AE7}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{E332E59E-60F1-475D-A84E-DEC963442AE7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C1365C6B-4020-4409-A9F7-09403EA4DA21}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C1365C6B-4020-4409-A9F7-09403EA4DA21}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C1365C6B-4020-4409-A9F7-09403EA4DA21}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C1365C6B-4020-4409-A9F7-09403EA4DA21}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

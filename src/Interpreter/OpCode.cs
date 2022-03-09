@@ -30,9 +30,20 @@ namespace Interpreter
 
         Return,
 
-        SkipIfFalse,
+        /// <summary>
+        /// ptr
+        /// </summary>
+        JumpIfFalse,
 
-        Skip,
+        /// <summary>
+        /// ptr
+        /// </summary>
+        Jump,
+
+        /// <summary>
+        /// ptr
+        /// </summary>
+        JumpTable,
 
         // Debugging
 

@@ -86,6 +86,20 @@ namespace Interpreter
         /// </summary>
         SetLocalOffset,
 
+        // Heap
+
+        /// <summary>
+        /// <code>(string idx)</code>
+        /// Allocates the the UTF-16 string contained in the data section at the index and pushes the pointer to the stack.
+        /// </summary>
+        String,
+
+        Record,
+
+        GetField,
+
+        SetField,
+
 
         // Math
 

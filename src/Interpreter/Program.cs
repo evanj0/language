@@ -1,5 +1,6 @@
 ﻿using Interpreter;
 using Interpreter.Exceptions;
+using Interpreter.Memory;
 using static Interpreter.Interpreter;
 
 var program = new Op[]
@@ -31,10 +32,31 @@ var program = new Op[]
     // proc 1:
     new Op(OpCode.NoOp), // 14
     new Op(OpCode.SetLocalOffset, Word.Ptr(1)),
+
+
+    new Op(OpCode.Record, Word.Ptr(2)),
+
+    new Op(OpCode.Local, Word.Ptr(1)),
+    new Op(OpCode.PushI64, Word.FromI64(523)),
+    new Op(OpCode.SetField, Word.Ptr(0)),
+
+    new Op(OpCode.Local, Word.Ptr(1)),
+    new Op(OpCode.PushI64, Word.FromI64(23476)),
+    new Op(OpCode.SetField, Word.FromI64(1)),
+
+    new Op(OpCode.Local, Word.Ptr(1)),
+    new Op(OpCode.GetField, Word.Ptr(0)),
+
+    new Op(OpCode.Local, Word.Ptr(1)),
+    new Op(OpCode.GetField, Word.Ptr(1)),
+
+    new Op(OpCode.Dump),
+
+
     new Op(OpCode.PushI64, Word.FromI64(1000)),
     new Op(OpCode.Local, Word.Ptr(0)), // local 0
     new Op(OpCode.CmpEqI64),
-    // new Op(OpCode.Call, Word.Ptr(1)),
+    new Op(OpCode.Call, Word.Ptr(1)),
     new Op(OpCode.Return),
 };
 
@@ -51,13 +73,19 @@ var vm = new Vm()
     Frames = new Stack<Frame>(),
 };
 
+var heap = new Heap(blockSize: 256);
+
 var maxStack = 65_536 * 16;
 
 var output = new ConsoleOutput();
 
+var data = new Span<byte>();
+
+var dataTable = Array.Empty<int>();
+
 try
 {
-    Run(ref vm, maxStack, output, program, procTable);
+    Run(ref vm, ref heap, maxStack, output, program, procTable, data, dataTable);
 }
 catch (VmException e)
 {

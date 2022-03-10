@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace Interpreter
 {
-    public struct Vm
+    public ref struct Vm
     {
         public ValueStack Stack;
         public Stack<Frame> Frames;

@@ -1,4 +1,5 @@
 ﻿using Interpreter.Exceptions;
+using Interpreter.Memory;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -17,7 +18,7 @@ public static class Interpreter
         // TODO pattern matching
         // TODO gc?
 
-    public static void Run(ref Vm vm, int maxStack, IVmOutput output, Op[] program, int[] procTable)
+    public static void Run(ref Vm vm, ref Heap heap, int maxStack, IVmOutput output, Op[] program, int[] procTable, Span<byte> data, int[] dataTable)
     {
         while (true)
         {
@@ -83,7 +84,10 @@ public static class Interpreter
                 // Debugging
 
                 case OpCode.Dump:
-                    output.WriteLine(vm.Debug());
+                    output.WriteLine("----------- Stack Dump -----------");
+                    output.Write(vm.Debug());
+                    output.WriteLine("--------- End Stack Dump ---------");
+                    output.WriteLine("");
                     break;
 
                 // Stack Ops
@@ -114,6 +118,32 @@ public static class Interpreter
                     vm.Stack.Push(inst.Data);
                     break;
 
+
+                // Heap
+
+                case OpCode.Record:
+                    { 
+                        var pointer = heap.AllocProduct(inst.Data.ToI32());
+                        vm.Stack.Push(pointer.ToWord());
+                        break;
+                    }
+
+                case OpCode.GetField:
+                    {
+                        var pointer = vm.Stack.Pop().ToHeapPointer();
+                        var value = heap.GetField(pointer, inst.Data.ToI32());
+                        vm.Stack.Push(value);
+                        break;
+                    }
+
+                // ptr * -> 
+                case OpCode.SetField:
+                    {
+                        var value = vm.Stack.Pop();
+                        var pointer = vm.Stack.Pop().ToHeapPointer();
+                        heap.SetField(pointer, inst.Data.ToI32(), value);
+                        break;
+                    }
 
                 // Math
 

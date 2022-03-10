@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Interpreter.Memory;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -49,5 +50,19 @@ namespace Interpreter.Exceptions
     internal class InstructionNotSupportedException : VmException
     {
         public InstructionNotSupportedException(string opName) : base($"Instruction `{opName}` is not supported.") { }
+    }
+
+
+    // Heap
+
+    internal class InvalidPointerException : VmException
+    {
+        public InvalidPointerException(HeapPointer pointer) : base($"Pointer `{pointer.Debug()}` does not point to a valid memory location.") { }
+    }
+
+    internal class TypeMismatchException : VmException
+    {
+        public TypeMismatchException(ReferenceType expected, ReferenceType actual, HeapPointer pointer) 
+            : base($"Expected type `{expected}` at location `{pointer.Debug()}`, but found type `{actual}`.") { }
     }
 }

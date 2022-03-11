@@ -6,6 +6,7 @@
   <ItemGroup>
     <Compile Include="Ir.fs" />
     <Compile Include="UntypedIr.fs" />
+    <Compile Include="TypedIr.fs" />
     <Compile Include="Lowering.fs" />
     <Compile Include="Inference.fs" />
   </ItemGroup>

@@ -11,7 +11,7 @@ module Lower =
 
     let rec lType (t: Ast.Type.Type) =
         match t.ty with
-        | Ast.Type.Named ident -> Ir.Type.Named(lIdent ident, []) // TODO need to put environment into here at some point
+        | Ast.Type.Named ident -> Ir.Type.Named(lIdent ident)
         | Ast.Type.Primitive Ast.Type.String -> Ir.Type.Primitive Ir.Type.Str
         | Ast.Type.Primitive Ast.Type.Integer -> Ir.Type.Primitive Ir.Type.Int
         | Ast.Type.Primitive Ast.Type.Real -> Ir.Type.Primitive Ir.Type.Real
@@ -83,3 +83,19 @@ module Lower =
                 | Some expr -> expr
                 | None -> lambdaExpr
             | _ -> lambdaExpr
+
+        | Ast.Expression.Block items ->
+            let rec lExprs xs =
+                match xs with
+                | { Ast.Expression.expr = Ast.Expression.Let(name, value) }::xs ->
+                    UntypedIr.Expr.Let(lShortIdent name, lExpr value, lExprs xs)
+                | { Ast.Expression.expr = Ast.Expression.UnsafeLet(name, value) }::xs ->
+                    UntypedIr.Expr.UnsafeLet(lShortIdent name, lExpr value, lExprs xs)
+                | { Ast.Expression.expr = Ast.Expression.UnsafeDo(value) }::xs ->
+                    UntypedIr.Expr.UnsafeLet(NameGeneration.generateDiscard, lExpr value, lExprs xs)
+                | x::[] -> lExpr x
+                | x::xs -> 
+                    UntypedIr.Expr.Block(lExpr x, lExprs xs)
+                | [] -> failwith "Unreachable"
+
+            lExprs items

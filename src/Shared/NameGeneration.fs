@@ -14,3 +14,5 @@ let generateNameWithUsage usage unique = generateNameWithAttrs [("usage", usage)
 
 let generateParamName unique = generateNameWithUsage "param" unique
 
+let generateDiscard = generateNameWithUsage "discard" "_"
+

@@ -24,7 +24,7 @@ namespace Interpreter
         SetIp,
 
         /// <summary>
-        /// ptr
+        /// <code>(call proc-ptr:u32)</code>
         /// </summary>
         Call,
 
@@ -86,6 +86,27 @@ namespace Interpreter
         /// </summary>
         SetLocalOffset,
 
+        /// <summary>
+        /// <code>(local-arg-load index:u16)</code>
+        /// <code> -> *</code>
+        /// Pushes the argument at <c>index</c> to the stack.
+        /// </summary>
+        LocalArgLoad,
+
+        /// <summary>
+        /// <code>(local-closure-load index:u16)</code>
+        /// <code> -> *</code>
+        /// Pushes the closure argument at <c>index</c> to the stack.
+        /// </summary>
+        LocalClosureLoad,
+
+        /// <summary>
+        /// <code>(local-load index:u16)</code>
+        /// <code> -> *</code>
+        /// Pushes the local value at <c>index</c> to the stack.
+        /// </summary>
+        LocalLoad,
+
         // Heap
 
         /// <summary>
@@ -99,6 +120,24 @@ namespace Interpreter
         GetField,
 
         SetField,
+
+        /// <summary>
+        /// <code>(closure-alloc proc-ptr:u32 num-closure-args:u16)</code>
+        /// <code> -> *</code>
+        /// </summary>
+        ClosureAlloc,
+
+        /// <summary>
+        /// <code>(closure-set-arg arg-index:u16)</code>
+        /// <code>ptr * -> </code>
+        /// </summary>
+        ClosureSetArg,
+
+        /// <summary>
+        /// <code>(closure-apply)</code>
+        /// <code>* ptr -> *</code>
+        /// </summary>
+        ClosureApply,
 
 
         // Math

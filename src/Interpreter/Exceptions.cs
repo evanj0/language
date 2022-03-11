@@ -7,47 +7,47 @@ using System.Threading.Tasks;
 
 namespace Interpreter.Exceptions
 {
-    internal class VmExitException : Exception 
+    public class VmExitException : Exception 
     {
         public VmExitException(int exitCode) : base($"Program exited with status code {exitCode}.") { }
     }
 
-    internal class VmException : Exception
+    public class VmException : Exception
     {
         public VmException(string message) : base(message) { }
     }
 
-    internal class StackPointerOutOfRangeException : VmException
+    public class StackPointerOutOfRangeException : VmException
     {
         public StackPointerOutOfRangeException() : base("Stack pointer was out of range.") { }
     }
 
-    internal class InstructionPointerOutOfRangeException : VmException
+    public class InstructionPointerOutOfRangeException : VmException
     {
         public InstructionPointerOutOfRangeException() : base("Instruction pointer was out of range.") { }
     }
 
-    internal class ProcedureDoesNotExistException : VmException
+    public class ProcedureDoesNotExistException : VmException
     {
         public ProcedureDoesNotExistException(int index) : base($"Procedure at index `{index}` does not exist.") { }
     }
 
-    internal class BlockDoesNotExistException : VmException
+    public class BlockDoesNotExistException : VmException
     {
         public BlockDoesNotExistException(int index) : base($"Block at index `{index}` does not exist.") { }
     }
 
-    internal class CallStackUnderflowException : VmException
+    public class CallStackUnderflowException : VmException
     {
         public CallStackUnderflowException() : base("The call stack has underflowed.") { }
     }
 
-    internal class CallStackOverflowException : VmException
+    public class CallStackOverflowException : VmException
     {
         public CallStackOverflowException(int count) : base($"The call stack has overflowed ({count} calls).") { }
     }
 
-    internal class InstructionNotSupportedException : VmException
+    public class InstructionNotSupportedException : VmException
     {
         public InstructionNotSupportedException(string opName) : base($"Instruction `{opName}` is not supported.") { }
     }
@@ -55,14 +55,24 @@ namespace Interpreter.Exceptions
 
     // Heap
 
-    internal class InvalidPointerException : VmException
+    public class VmHeapException : Exception
     {
-        public InvalidPointerException(HeapPointer pointer) : base($"Pointer `{pointer.Debug()}` does not point to a valid memory location.") { }
+        public HeapPointer Pointer { get; }
+
+        public VmHeapException(string message, HeapPointer pointer) : base(message)
+        {
+            Pointer = pointer;
+        }
     }
 
-    internal class TypeMismatchException : VmException
+    public class InvalidPointerException : VmHeapException
+    {
+        public InvalidPointerException(HeapPointer pointer) : base($"Pointer `{pointer.Debug()}` does not point to a valid memory location.", pointer) { }
+    }
+
+    public class TypeMismatchException : VmHeapException
     {
         public TypeMismatchException(ReferenceType expected, ReferenceType actual, HeapPointer pointer) 
-            : base($"Expected type `{expected}` at location `{pointer.Debug()}`, but found type `{actual}`.") { }
+            : base($"Expected type `{expected}` at location `{pointer.Debug()}`, but found type `{actual}`.", pointer) { }
     }
 }

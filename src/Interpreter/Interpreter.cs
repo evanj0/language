@@ -18,7 +18,7 @@ public static class Interpreter
         // TODO pattern matching
         // TODO gc?
 
-    public static void Run(ref Vm vm, ref Heap heap, int maxStack, IVmOutput output, Op[] program, int[] procTable, Span<byte> data, int[] dataTable)
+    public static void Run(ref Vm vm, ref Heap heap, int maxStack, IVmOutput output, Op[] program, ProcInfo[] procTable, Span<byte> data, int[] dataTable)
     {
         while (true)
         {
@@ -46,16 +46,7 @@ public static class Interpreter
                 case OpCode.Call:
                     {
                         var proc = inst.Data.ToI32();
-                        if (proc >= procTable.Length)
-                        {
-                            throw new ProcedureDoesNotExistException(proc);
-                        }
-                        if (vm.Frames.Count >= maxStack)
-                        {
-                            throw new CallStackOverflowException(vm.Frames.Count);
-                        }
-                        vm.Frames.Push(new Frame(vm.Ip, vm.Stack.Sp));
-                        vm.Ip = procTable[proc];
+                        Call(ref vm, maxStack, procTable, proc, 0);
                         break;
                     }
 
@@ -64,8 +55,8 @@ public static class Interpreter
                         var frame = PopCurrentFrame(ref vm);
                         vm.Ip = frame.ReturnAddr;
                         var returnValue = vm.Stack.Pop();
-                        vm.Stack.Data[frame.BasePtr] = returnValue;
-                        vm.Stack.Sp = frame.BasePtr + 1;
+                        vm.Stack.Data[frame.BaseSp] = returnValue;
+                        vm.Stack.Sp = frame.BaseSp + 1;
                         break;
                     }
 
@@ -94,7 +85,7 @@ public static class Interpreter
 
                 case OpCode.Local:
                     {
-                        var index = PeekCurrentFrame(ref vm).BasePtr + inst.Data.ToI32();
+                        var index = PeekCurrentFrame(ref vm).BaseSp + inst.Data.ToI32();
                         var value = vm.Stack.Index(index);
                         vm.Stack.Push(value);
                         break;
@@ -103,7 +94,7 @@ public static class Interpreter
                 case OpCode.SetLocalOffset:
                     {
                         var frame = vm.Frames.Pop();
-                        frame.BasePtr -= inst.Data.ToI32();
+                        frame.BaseSp -= inst.Data.ToI32();
                         vm.Frames.Push(frame);
                         break;
                     }
@@ -118,12 +109,35 @@ public static class Interpreter
                     vm.Stack.Push(inst.Data);
                     break;
 
+                case OpCode.LocalArgLoad:
+                    {
+                        var index = PeekCurrentFrame(ref vm).BaseSp + inst.Data.ToI32();
+                        var value = vm.Stack.Index(index);
+                        vm.Stack.Push(value);
+                        break;
+                    }
+
+                case OpCode.LocalClosureLoad:
+                    {
+                        var index = PeekCurrentFrame(ref vm).ClosureArgsSp + inst.Data.ToI32();
+                        var value = vm.Stack.Index(index);
+                        vm.Stack.Push(value);
+                        break;
+                    }
+
+                case OpCode.LocalLoad:
+                    {
+                        var index = PeekCurrentFrame(ref vm).LocalsSp + inst.Data.ToI32();
+                        var value = vm.Stack.Index(index);
+                        vm.Stack.Push(value);
+                        break;
+                    }
 
                 // Heap
 
                 case OpCode.Record:
                     { 
-                        var pointer = heap.AllocProduct(inst.Data.ToI32());
+                        var pointer = heap.AllocRecord(inst.Data.ToI32());
                         vm.Stack.Push(pointer.ToWord());
                         break;
                     }
@@ -142,6 +156,45 @@ public static class Interpreter
                         var value = vm.Stack.Pop();
                         var pointer = vm.Stack.Pop().ToHeapPointer();
                         heap.SetField(pointer, inst.Data.ToI32(), value);
+                        break;
+                    }
+
+                case OpCode.ClosureAlloc:
+                    {
+                        var procPointer = inst.Data.ReadU32(0);
+                        var numParams = inst.Data.ReadU16(4);
+                        var pointer = heap.AllocClosure((int)procPointer, numParams);
+                        vm.Stack.Push(pointer.ToWord());
+                        break;
+                    }
+
+                case OpCode.ClosureSetArg:
+                    {
+                        var value = vm.Stack.Pop();
+                        var pointer = vm.Stack.Pop().ToHeapPointer();
+                        var paramIdx = inst.Data.ReadU16(0);
+                        heap.SetClosureArg(pointer, paramIdx, value);
+                        break;
+                    }
+
+                // -- Locals Sp
+                // closure arg_n
+                // ...
+                // closure arg_0
+                // -- Closure Args Sp
+                // procedure arg_n
+                // ...
+                // procedure arg_1
+                // -- Base Pointer
+                case OpCode.ClosureApply:
+                    {
+                        var pointer = vm.Stack.Pop().ToHeapPointer();
+                        var header = heap.GetClosureHeader(pointer);
+                        Call(ref vm, maxStack, procTable, header.Pointer, header.NumArgs);
+                        for (var i = 0; i < header.NumArgs; i++)
+                        {
+                            vm.Stack.Push(heap.GetClosureArg(pointer, i));
+                        }
                         break;
                     }
 
@@ -171,6 +224,30 @@ public static class Interpreter
 
             vm.Ip++;
         }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void Call(ref Vm vm, int maxStack, ProcInfo[] procTable, int proc, int closureArgs)
+    {
+        if (proc >= procTable.Length)
+        {
+            throw new ProcedureDoesNotExistException(proc);
+        }
+        if (vm.Frames.Count >= maxStack)
+        {
+            throw new CallStackOverflowException(vm.Frames.Count);
+        }
+        if (vm.Stack.Sp - procTable[proc].NumArgs < 0)
+        {
+            throw new VmException("Base stack pointer was moved out of range.");
+        }
+        vm.Frames.Push(new Frame(
+            returnAddr: vm.Ip, 
+            baseSp: vm.Stack.Sp - procTable[proc].NumArgs, // baseSp at first argument
+            closureArgsOffset: procTable[proc].NumArgs, // closure args after arguments
+            localsOffset: procTable[proc].NumArgs + closureArgs // locals after closure args and procedure args
+            ));
+        vm.Ip = procTable[proc].Addr;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

@@ -18,8 +18,8 @@ namespace Interpreter.Memory;
 
 public enum ReferenceType : byte
 {
-    Product,
-    Sum,
+    Record,
+    Union,
     Closure,
     String,
 }
@@ -49,18 +49,17 @@ public struct Header
 }
 
 [StructLayout(LayoutKind.Explicit)]
-public struct ProductHeader
+public struct RecordHeader
 {
     [FieldOffset(0)]
     public int NumFields;
-
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Word ToWord()
     {
         unsafe
         {
-            fixed (ProductHeader* ptr = &this)
+            fixed (RecordHeader* ptr = &this)
             {
                 Word* wordPtr = (Word*)ptr;
                 return *wordPtr;
@@ -74,10 +73,23 @@ public struct ProductHeader
 public struct ClosureHeader
 {
     [FieldOffset(0)]
-    public int ProcPointer;
+    public int Pointer;
 
     [FieldOffset(4)]
-    public int NumVariables;
+    public int NumArgs;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Word ToWord() 
+    {
+        unsafe
+        {
+            fixed (ClosureHeader* ptr = &this)
+            {
+                Word* wordPtr = (Word*)ptr;
+                return *wordPtr;
+            }
+        }
+    }
 }
 
 public static class Word_Header_Extensions 
@@ -94,12 +106,23 @@ public static class Word_Header_Extensions
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static ProductHeader ToProductHeader(this Word word)
+    public static RecordHeader ToProductHeader(this Word word)
     {
         unsafe
         {
             Word* ptr = &word;
-            ProductHeader* headerPtr = (ProductHeader*)ptr;
+            RecordHeader* headerPtr = (RecordHeader*)ptr;
+            return *headerPtr;
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static ClosureHeader ToClosureHeader(this Word word)
+    {
+        unsafe
+        {
+            Word* ptr = &word;
+            ClosureHeader* headerPtr = (ClosureHeader*)ptr;
             return *headerPtr;
         }
     }

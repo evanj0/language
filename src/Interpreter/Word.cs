@@ -119,9 +119,69 @@ namespace Interpreter
             return Byte0 == 1;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public uint ReadU32(int offset)
+        {
+            unsafe
+            {
+                fixed (Word* wordPtr = &this)
+                {
+                    uint* uintPtr = (uint*)((byte*)wordPtr + offset);
+                    return *uintPtr;
+                }
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public ushort ReadU16(int offset)
+        {
+            unsafe
+            {
+                fixed (Word* wordPtr = &this)
+                {
+                    ushort* ushortPtr = (ushort*)((byte*)wordPtr + offset);
+                    return *ushortPtr;
+                }
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public Word SetU32(int offset, uint value)
+        {
+            unsafe
+            {
+                fixed (Word* wordPtr = &this)
+                {
+                    byte* uintPtr = (byte*)&value;
+                    byte* bytePtr = (byte*)wordPtr;
+                    bytePtr[offset] = uintPtr[0];
+                    bytePtr[offset + 1] = uintPtr[1];
+                    bytePtr[offset + 2] = uintPtr[2];
+                    bytePtr[offset + 3] = uintPtr[3];
+                    return *wordPtr;
+                }
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public Word SetU16(int offset, ushort value)
+        {
+            unsafe
+            {
+                fixed (Word* wordPtr = &this)
+                {
+                    byte* ushortPtr = (byte*)&value;
+                    byte* bytePtr = (byte*)wordPtr;
+                    bytePtr[offset] = ushortPtr[0];
+                    bytePtr[offset + 1] = ushortPtr[1];
+                    return *wordPtr;
+                }
+            }
+        }
+
         public string Debug()
         {
-            return $"Int64 = {ToI64()}, Bool = {ToBool()}";
+            return $"Int64 = {ToI64()}";
         }
     }
 }

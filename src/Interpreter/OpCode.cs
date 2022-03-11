@@ -12,16 +12,19 @@ namespace Interpreter
         // Control Flow
 
         /// <summary>
-        /// i32
+        /// <code>(exit status-code:i32)</code>
         /// </summary>
         Exit,
 
+        /// <summary>
+        /// <code>(no-op)</code>
+        /// </summary>
         NoOp,
 
         /// <summary>
-        /// ptr
+        /// <code>(ip-set ip:u64)</code>
         /// </summary>
-        SetIp,
+        IpSet,
 
         /// <summary>
         /// <code>(call proc-ptr:u32)</code>
@@ -30,7 +33,7 @@ namespace Interpreter
 
         /// <summary>
         /// <code>(return)</code>
-        /// Copies the top value to localoffset + 0. Lowers stack pointer to localoffset + 1.
+        /// Copies the top value to baseptr + 0. Lowers stack pointer to baseptr + 1.
         /// </summary>
         Return,
 
@@ -51,40 +54,29 @@ namespace Interpreter
 
         // Debugging
 
-        Dump,
+        DebugDump,
 
         // Stack Ops
 
         /// <summary>
         /// i64
         /// </summary>
-        PushI64,
+        I64Push,
 
         /// <summary>
         /// f64
         /// </summary>
-        PushF64,
+        F64Push,
 
         /// <summary>
         /// char
         /// </summary>
-        PushChar,
+        CharPush,
 
         /// <summary>
         /// bool
         /// </summary>
-        PushBool,
-
-        /// <summary>
-        /// <code>(local idx)</code>
-        /// Pushes the value at the index to the stack.
-        /// </summary>
-        Local,
-
-        /// <summary>
-        /// ptr
-        /// </summary>
-        SetLocalOffset,
+        BoolPush,
 
         /// <summary>
         /// <code>(local-arg-load index:u16)</code>
@@ -94,11 +86,11 @@ namespace Interpreter
         LocalArgLoad,
 
         /// <summary>
-        /// <code>(local-closure-load index:u16)</code>
+        /// <code>(local-closure-arg-load index:u16)</code>
         /// <code> -> *</code>
         /// Pushes the closure argument at <c>index</c> to the stack.
         /// </summary>
-        LocalClosureLoad,
+        LocalClosureArgLoad,
 
         /// <summary>
         /// <code>(local-load index:u16)</code>
@@ -110,16 +102,16 @@ namespace Interpreter
         // Heap
 
         /// <summary>
-        /// <code>(string idx)</code>
+        /// <code>(string location:u64)</code>
         /// Allocates the the UTF-16 string contained in the data section at the index and pushes the pointer to the stack.
         /// </summary>
-        String,
+        StringLoad,
 
-        Record,
+        RecordAlloc,
 
-        GetField,
+        RecordGetField,
 
-        SetField,
+        RecordSetField,
 
         /// <summary>
         /// <code>(closure-alloc proc-ptr:u32 num-closure-args:u16)</code>
@@ -142,9 +134,9 @@ namespace Interpreter
 
         // Math
 
-        AddI64,
+        I64Add,
 
-        CmpEqI64,
+        I64CmpEq,
     }
 
     public static class OpCodeExtensions 

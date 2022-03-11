@@ -9,4 +9,8 @@
     <Compile Include="Instructions.fs" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\Interpreter\Interpreter.csproj" />
+  </ItemGroup>
+
 </Project>

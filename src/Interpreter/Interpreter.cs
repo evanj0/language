@@ -39,7 +39,7 @@ public static class Interpreter
                 case OpCode.NoOp:
                     break;
 
-                case OpCode.SetIp:
+                case OpCode.IpSet:
                     vm.Ip = inst.Data.ToI32();
                     break;
 
@@ -74,7 +74,7 @@ public static class Interpreter
 
                 // Debugging
 
-                case OpCode.Dump:
+                case OpCode.DebugDump:
                     output.WriteLine("----------- Stack Dump -----------");
                     output.Write(vm.Debug());
                     output.WriteLine("--------- End Stack Dump ---------");
@@ -83,29 +83,13 @@ public static class Interpreter
 
                 // Stack Ops
 
-                case OpCode.Local:
-                    {
-                        var index = PeekCurrentFrame(ref vm).BaseSp + inst.Data.ToI32();
-                        var value = vm.Stack.Index(index);
-                        vm.Stack.Push(value);
-                        break;
-                    }
-
-                case OpCode.SetLocalOffset:
-                    {
-                        var frame = vm.Frames.Pop();
-                        frame.BaseSp -= inst.Data.ToI32();
-                        vm.Frames.Push(frame);
-                        break;
-                    }
-
                 //  -> i64
-                case OpCode.PushI64:
+                case OpCode.I64Push:
                     vm.Stack.Push(inst.Data);
                     break;
 
                 //  -> bool
-                case OpCode.PushBool:
+                case OpCode.BoolPush:
                     vm.Stack.Push(inst.Data);
                     break;
 
@@ -117,7 +101,7 @@ public static class Interpreter
                         break;
                     }
 
-                case OpCode.LocalClosureLoad:
+                case OpCode.LocalClosureArgLoad:
                     {
                         var index = PeekCurrentFrame(ref vm).ClosureArgsSp + inst.Data.ToI32();
                         var value = vm.Stack.Index(index);
@@ -135,14 +119,14 @@ public static class Interpreter
 
                 // Heap
 
-                case OpCode.Record:
+                case OpCode.RecordAlloc:
                     { 
                         var pointer = heap.AllocRecord(inst.Data.ToI32());
                         vm.Stack.Push(pointer.ToWord());
                         break;
                     }
 
-                case OpCode.GetField:
+                case OpCode.RecordGetField:
                     {
                         var pointer = vm.Stack.Pop().ToHeapPointer();
                         var value = heap.GetField(pointer, inst.Data.ToI32());
@@ -151,7 +135,7 @@ public static class Interpreter
                     }
 
                 // ptr * -> 
-                case OpCode.SetField:
+                case OpCode.RecordSetField:
                     {
                         var value = vm.Stack.Pop();
                         var pointer = vm.Stack.Pop().ToHeapPointer();
@@ -201,7 +185,7 @@ public static class Interpreter
                 // Math
 
                 // i64 i64 -> i64
-                case OpCode.AddI64:
+                case OpCode.I64Add:
                     {
                         var val1 = vm.Stack.Pop().ToI64();
                         var val2 = vm.Stack.Pop().ToI64();
@@ -210,7 +194,7 @@ public static class Interpreter
                     }
 
                 // i64 i64 -> bool
-                case OpCode.CmpEqI64:
+                case OpCode.I64CmpEq:
                     {
                         var val1 = vm.Stack.Pop().ToI64();
                         var val2 = vm.Stack.Pop().ToI64();

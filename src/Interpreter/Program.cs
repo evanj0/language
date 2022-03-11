@@ -8,7 +8,7 @@ var program1 = new Op[]
 {
     // section code
     // header:
-    new Op(OpCode.SetIp, Word.FromI32(1)), // 0
+    new Op(OpCode.IpSet, Word.FromI32(1)), // 0
 
     // setup:
     new Op(OpCode.NoOp), // 1
@@ -18,16 +18,16 @@ var program1 = new Op[]
     // section proc
     // proc main:
     new Op(OpCode.NoOp), // 4
-    new Op(OpCode.PushI64, Word.FromI64(1000)),
+    new Op(OpCode.I64Push, Word.FromI64(1000)),
     new Op(OpCode.Call, Word.Ptr(1)),
     new Op(OpCode.JumpIfFalse, Word.Ptr(3)),
         // then:
-        new Op(OpCode.PushI64, Word.FromI64(69)),
-        new Op(OpCode.Dump),
+        new Op(OpCode.I64Push, Word.FromI64(69)),
+        new Op(OpCode.DebugDump),
         new Op(OpCode.Jump, Word.Ptr(2)),
         // else:
-        new Op(OpCode.PushI64, Word.FromI64(420)),
-        new Op(OpCode.Dump),
+        new Op(OpCode.I64Push, Word.FromI64(420)),
+        new Op(OpCode.DebugDump),
     new Op(OpCode.Return),
 
     // proc 1:
@@ -35,28 +35,28 @@ var program1 = new Op[]
     new Op(OpCode.NoOp),
 
 
-    new Op(OpCode.Record, Word.Ptr(128)),
+    new Op(OpCode.RecordAlloc, Word.Ptr(128)),
 
-    new Op(OpCode.Local, Word.Ptr(1)),
-    new Op(OpCode.PushI64, Word.FromI64(523)),
-    new Op(OpCode.SetField, Word.Ptr(0)),
+    new Op(OpCode.LocalLoad, Word.Ptr(1)),
+    new Op(OpCode.I64Push, Word.FromI64(523)),
+    new Op(OpCode.RecordSetField, Word.Ptr(0)),
 
-    new Op(OpCode.Local, Word.Ptr(1)),
-    new Op(OpCode.PushI64, Word.FromI64(23476)),
-    new Op(OpCode.SetField, Word.FromI64(1)),
+    new Op(OpCode.LocalLoad, Word.Ptr(1)),
+    new Op(OpCode.I64Push, Word.FromI64(23476)),
+    new Op(OpCode.RecordSetField, Word.FromI64(1)),
 
-    new Op(OpCode.Local, Word.Ptr(1)),
-    new Op(OpCode.GetField, Word.Ptr(0)),
+    new Op(OpCode.LocalLoad, Word.Ptr(1)),
+    new Op(OpCode.RecordGetField, Word.Ptr(0)),
 
-    new Op(OpCode.Local, Word.Ptr(1)),
-    new Op(OpCode.GetField, Word.Ptr(1)),
+    new Op(OpCode.LocalLoad, Word.Ptr(1)),
+    new Op(OpCode.RecordGetField, Word.Ptr(1)),
 
-    new Op(OpCode.Dump),
+    new Op(OpCode.DebugDump),
 
 
-    new Op(OpCode.PushI64, Word.FromI64(1000)),
-    new Op(OpCode.Local, Word.Ptr(0)), // local 0
-    new Op(OpCode.CmpEqI64),
+    new Op(OpCode.I64Push, Word.FromI64(1000)),
+    new Op(OpCode.LocalLoad, Word.Ptr(0)), // local 0
+    new Op(OpCode.I64CmpEq),
     new Op(OpCode.Call, Word.Ptr(1)),
     new Op(OpCode.Return),
 };
@@ -71,13 +71,13 @@ var program2 = new Op[]
 {
     // section code
     // header:
-    new Op(OpCode.SetIp, Word.FromI32(1)), // 0
+    new Op(OpCode.IpSet, Word.FromI32(1)), // 0
 
     // setup:
     new Op(OpCode.NoOp), // 1
-    new Op(OpCode.Record, Word.Ptr(0)), // (record-alloc 0)
-    new Op(OpCode.Record, Word.Ptr(0)), // (record-alloc 0)
-    new Op(OpCode.Record, Word.Ptr(0)), // (record-alloc 0)
+    new Op(OpCode.RecordAlloc, Word.Ptr(0)), // (record-alloc 0)
+    new Op(OpCode.RecordAlloc, Word.Ptr(0)), // (record-alloc 0)
+    new Op(OpCode.RecordAlloc, Word.Ptr(0)), // (record-alloc 0)
     new Op(OpCode.Call, Word.Ptr(0)), // (call 'main')
     new Op(OpCode.ClosureApply), // (closure-apply)
     new Op(OpCode.Exit, Word.FromI32(0)),
@@ -88,23 +88,23 @@ var program2 = new Op[]
     new Op(OpCode.ClosureAlloc, new Word().SetU32(0, value: 1).SetU16(4, value: 2)),
 
     new Op(OpCode.LocalLoad, Word.Ptr(0)),
-    new Op(OpCode.PushI64, Word.FromI64(69)),
+    new Op(OpCode.I64Push, Word.FromI64(69)),
     new Op(OpCode.ClosureSetArg, Word.Ptr(0)),
 
     new Op(OpCode.LocalLoad, Word.Ptr(0)),
-    new Op(OpCode.PushI64, Word.FromI64(420)),
+    new Op(OpCode.I64Push, Word.FromI64(420)),
     new Op(OpCode.ClosureSetArg, Word.Ptr(1)),
 
     new Op(OpCode.LocalLoad, Word.Ptr(0)),
 
-    new Op(OpCode.Dump),
+    new Op(OpCode.DebugDump),
 
     new Op(OpCode.Return),
 
     // proc main[closure`0]
     new Op(OpCode.NoOp), // 18
 
-    new Op(OpCode.Dump),
+    new Op(OpCode.DebugDump),
 
     new Op(OpCode.Return),
 };

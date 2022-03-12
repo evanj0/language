@@ -128,15 +128,11 @@ var maxStack = 65_536 * 16;
 
 var output = new ConsoleOutput();
 
-var data = new Span<byte>();
-
-var dataTable = Array.Empty<int>();
-
 var sw = new Stopwatch();
 try
 {
     sw.Start();
-    Run(ref vm, ref heap, maxStack, output, program2, procTable2, data, dataTable);
+    Run(ref vm, ref heap, maxStack, output, program2, procTable2, new string[] { });
 }
 catch (VmException e)
 {

@@ -18,7 +18,7 @@ public static class Interpreter
         // TODO pattern matching
         // TODO gc?
 
-    public static void Run(ref Vm vm, ref Heap heap, int maxStack, IVmOutput output, Op[] program, ProcInfo[] procTable, Span<byte> data, int[] dataTable)
+    public static void Run(ref Vm vm, ref Heap heap, int maxStack, IVmOutput output, Op[] program, ProcInfo[] procTable, string[] strings)
     {
         while (true)
         {

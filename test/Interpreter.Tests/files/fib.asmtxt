@@ -1,0 +1,55 @@
+;; Calculate fibonacci numbers recursively.
+
+(code
+    (ip-set "entry_point")
+    
+    (label "entry_point")
+    (record.alloc 0)        ;; ()
+    (call "main")           ;; () main
+    (closure.apply)
+    (exit 0)
+
+    ;; main
+    (proc "main" (args 0))
+        (closure.alloc (proc "main[closure`0]") (args 0))
+    (return)
+
+        (proc "main[closure`0]" (args 1)) ;; ->
+            ;; fib 30 = 832040
+            (i64.push 30)
+            (call "fib")
+            (debug.dump)
+        (return)
+    ;; end main
+
+    ;; fib
+    (proc "fib" (args 1)) ;; int -> int
+        (local.arg.load 0)  ;; int
+        (i64.push 0)        ;; int int 
+        (i64.cmp-eq)        ;; bool
+        (jump-if-false 3)
+            (i64.push 0)    ;; int
+            (return)
+        (jump 17)
+            (local.arg.load 0)  ;; int
+            (i64.push 1)        ;; int int
+            (i64.cmp-eq)        ;; bool
+            (jump-if-false 3)
+                (i64.push 1)    ;; int
+                (return)
+            (jump 2)
+                (i64.push -1)       ;; int
+                (local.arg.load 0)  ;; int int
+                (i64.add)           ;; int
+                (call "fib")        ;; int
+
+                (i64.push -2)       ;; int int
+                (local.arg.load 0)  ;; int int int
+                (i64.add)           ;; int int
+                (call "fib")        ;; int int
+                (i64.add)           ;; int
+
+                (return)
+        (return)
+    ;; end fib
+)
